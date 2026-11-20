@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SPHERExstack"
+abstract: >
+  Stack, slice, and animate any field of the SPHEREx sky survey: builds
+  monochromatic mosaics, (RA, Dec, lambda) spectral cubes, and false-color
+  RGB images directly from SPHEREx Level 2 spectral images retrieved from
+  IRSA.
+authors:
+  - family-names: Serna
+    given-names: Javier
+    affiliation: University of Oklahoma
+license: MIT
+repository-code: "https://github.com/javiserna/SPHERExstack"
+version: 1.0.0
+date-released: 2026-11-20
+doi: "10.5281/zenodo.24388875"

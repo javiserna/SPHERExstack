@@ -1,0 +1,9 @@
+[console_scripts]
+spherex-animate = spherexstack.cli:animate
+spherex-cube = spherexstack.cli:cube
+spherex-download = spherexstack.cli:download
+spherex-get = spherexstack.cli:get
+spherex-merge = spherexstack.cli:merge
+spherex-mosaic = spherexstack.cli:mosaic
+spherex-query = spherexstack.cli:query
+spherex-rgb = spherexstack.cli:rgb
