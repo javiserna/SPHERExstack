@@ -207,7 +207,7 @@ These are derived from the code, not assumed:
 - **`--target` name resolution depends on SIMBAD being reachable.** `spherex-get --target` queries SIMBAD's own TAP service live; if SIMBAD is down or the name isn't recognized, use `--ra`/`--dec` instead, which never depends on any third-party service beyond IRSA itself.
 - **`spherex-get` is a convenience wrapper, not a separate implementation.** It always builds a square ROI (center + `--size_deg`); for a rectangular box, tiling a large region, or reusing cutouts you already downloaded under a different layout, use `spherex-query`/`spherex-download`/`spherex-cube` directly — `spherex-get` prints the `--list`/`--roi` paths it wrote so you can still drop down to those commands afterward.
 - **`spherex-get`'s default of 1 download worker is deliberately conservative** (so a first run behaves predictably); raise `--workers` (e.g. `--workers 6`) once you're comfortable with the pipeline. `spherex-download` itself still defaults to 6.
-- **Tested against SPHEREx Quick Release 2 (QR2) Level 2 data.** Later data releases may change file formats.
+- **Tested against SPHEREx Data Release 1 and Quick Release 3 (QR3) data.** Later data releases may change file formats.
 - **Not a substitute for the official SPHEREx data products or SPHEREx Science Team maps.** This is an exploration/visualization tool built from individual Level 2 exposures, not a validated science pipeline.
 
 ## Performance notes
