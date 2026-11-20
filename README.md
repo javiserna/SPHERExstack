@@ -1,4 +1,4 @@
-![logo](docs/img/logo.jpeg)
+<img src="docs/img/logo.jpeg" alt="logo" width="200">
 
 **Stack, slice, and animate any field of the SPHEREx sky survey.**
 
