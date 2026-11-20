@@ -1,6 +1,6 @@
 # SPHERExstack
 
-**Stack, slice, and animate any field of the SPHEREx infrared sky.**
+**Stack, slice, and animate any field of the SPHEREx sky survey.**
 
 `SPHERExstack` is a tool to process and visualize any region of the sky across the 0.7–5 µm wavelength range—turning SPHEREx observations into monochromatic spectral cubes, custom false-color RGB images, and shareable animations.
 
