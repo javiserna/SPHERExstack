@@ -4,10 +4,9 @@
 
 `SPHERExstack` is a tool to process and visualize any region of the sky across the 0.7–5 µm
 wavelength range retrieved from [SPHEREx](https://spherex.caltech.edu/) Level 2 spectral images
-on [IRSA](https://irsa.ipac.caltech.edu/) — turning raw observations into monochromatic spectral
+on [IRSA](https://irsa.ipac.caltech.edu/), turning raw observations into monochromatic spectral
 cubes, custom false-color RGB images, and shareable animations. It is meant for exploration,
-visualization, and quick-look science of extended emission and absorption — not as a replacement
-for the official SPHEREx data products.
+visualization, and quick-look science of extended emission and absorption.
 
 ![Wavelength sweep of Andromeda (M31), built by this package](docs/img/demo_lambda_slices_Andromeda.gif)
 
