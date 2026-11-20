@@ -1,6 +1,4 @@
-# SPHERExstack
 ![logo](docs/img/logo.jpeg)
-
 
 **Stack, slice, and animate any field of the SPHEREx sky survey.**
 
