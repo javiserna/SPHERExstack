@@ -161,12 +161,24 @@ def render_lambda_slice(
     lam_bar_max: float = 5.0,
     cmap_name: str = "rainbow",
     fov_deg: tuple[float, float] | None = None,
+    grayscale: bool = False,
+    invert: bool = False,
 ) -> None:
     """Render one monochromatic mosaic slice, tinted by its wavelength, with a lambda colorbar.
 
     ``fov_deg``, if given as ``(width_deg, height_deg)``, is printed in the
     bottom-right corner in whichever unit (degrees/arcmin/arcsec) best suits
-    that size.
+    that size. If ``grayscale`` is True, the image itself is plain black/white
+    intensity (no per-frame wavelength tint) -- the eye picks out brightness
+    detail more easily in grayscale than in a single hue, especially for faint
+    extended structure; the colorbar (and its moving marker) still show where
+    this frame sits in the full wavelength range either way. If ``invert`` is
+    also True, the rendered image is a photographic negative of that (bright
+    becomes dark and vice versa, on a white instead of black page) -- a
+    classic optical-astronomy display convention that some find easier to
+    read extended low-contrast structure from, especially on paper/print.
+    ``invert`` also works with a colored (non-grayscale) image, inverting
+    each channel, though that combination is unusual.
     """
     x = np.asarray(mosaic, dtype=float)
     x_clip = np.clip(x, vmin, vmax)
@@ -177,20 +189,31 @@ def render_lambda_slice(
 
     cmap = cm.get_cmap(cmap_name)
     t = np.clip((lam_center - lam_bar_min) / (lam_bar_max - lam_bar_min), 0.0, 1.0)
-    color = np.array(cmap(t)[:3])
 
     ny, nx = inten.shape
     rgb_img = np.zeros((ny, nx, 3), dtype=float)
-    rgb_img[mask] = inten[mask, None] * color[None, :]
+    if grayscale:
+        rgb_img[mask] = inten[mask, None]
+    else:
+        color = np.array(cmap(t)[:3])
+        rgb_img[mask] = inten[mask, None] * color[None, :]
+    if invert:
+        rgb_img = 1.0 - rgb_img
+
+    # The figure/axes background and all text/tick/outline colors swap with `invert` --
+    # the colorbar's own rainbow gradient is left alone either way (it is a position
+    # indicator, not image data, and inverting a qualitative rainbow has no clear meaning).
+    bg_color = "white" if invert else "black"
+    fg_color = "black" if invert else "white"
 
     fig = plt.figure(figsize=(5.2, 5.2), dpi=160)
-    fig.patch.set_facecolor("black")
+    fig.patch.set_facecolor(bg_color)
     ax = fig.add_axes([0.00, 0.00, 1.00, 0.955])
     cax = fig.add_axes([0.12, 0.962, 0.76, 0.016])
-    ax.set_facecolor("black")
+    ax.set_facecolor(bg_color)
     for sp in ax.spines.values():
         sp.set_visible(False)
-    cax.set_facecolor("black")
+    cax.set_facecolor(bg_color)
     for sp in cax.spines.values():
         sp.set_visible(False)
 
@@ -203,11 +226,11 @@ def render_lambda_slice(
         0.02,
         f"{lam_center:.3f} um   coverage {100 * coverage_frac:.0f}%",
         transform=ax.transAxes,
-        color="white",
+        color=fg_color,
         fontsize=8,
         ha="left",
         va="bottom",
-        bbox=dict(facecolor="black", alpha=0.4, edgecolor="none", pad=2),
+        bbox=dict(facecolor=bg_color, alpha=0.4, edgecolor="none", pad=2),
     )
 
     if fov_deg is not None:
@@ -216,11 +239,11 @@ def render_lambda_slice(
             0.02,
             _format_fov(*fov_deg),
             transform=ax.transAxes,
-            color="white",
+            color=fg_color,
             fontsize=8,
             ha="right",
             va="bottom",
-            bbox=dict(facecolor="black", alpha=0.4, edgecolor="none", pad=2),
+            bbox=dict(facecolor=bg_color, alpha=0.4, edgecolor="none", pad=2),
         )
 
     norm = mcolors.Normalize(vmin=lam_bar_min, vmax=lam_bar_max)
@@ -243,15 +266,15 @@ def render_lambda_slice(
     # frames even though the gradient itself never changes.
     lo = max(lam_center - dlambda, lam_bar_min)
     hi = min(lam_center + dlambda, lam_bar_max)
-    cbar.ax.axvline(lo, color="white", linewidth=0.9, linestyle="--", zorder=5)
-    cbar.ax.axvline(hi, color="white", linewidth=0.9, linestyle="--", zorder=5)
-    cbar.ax.axvline(lam_center, color="white", linewidth=1.6, zorder=6)
+    cbar.ax.axvline(lo, color=fg_color, linewidth=0.9, linestyle="--", zorder=5)
+    cbar.ax.axvline(hi, color=fg_color, linewidth=0.9, linestyle="--", zorder=5)
+    cbar.ax.axvline(lam_center, color=fg_color, linewidth=1.6, zorder=6)
 
-    cbar.ax.tick_params(axis="x", colors="white", labelsize=8, pad=1, length=3, width=0.8)
+    cbar.ax.tick_params(axis="x", colors=fg_color, labelsize=8, pad=1, length=3, width=0.8)
     cbar.ax.xaxis.set_ticks_position("bottom")
     cbar.set_label("")
     cax.set_yticks([])
-    cbar.outline.set_edgecolor("white")
+    cbar.outline.set_edgecolor(fg_color)
     cbar.outline.set_linewidth(0.6)
 
     fig.savefig(out_png, facecolor=fig.get_facecolor(), edgecolor="none")
@@ -271,13 +294,20 @@ def render_frame_lambda_by_row(
     context_gray: bool = True,
     show_lambda_colorbar: bool = True,
     lambda_colorbar_style: str = "top",
+    grayscale: bool = False,
+    invert: bool = False,
 ) -> None:
     """Render one raw-exposure frame, colored row-by-row by that row's wavelength.
 
     Used by the point-target "raw" animation mode (one frame per exposure,
     no wavelength binning/coaddition across exposures -- see
     ``spherex-animate --mode raw``), where each detector row has its own
-    wavelength because of SPHEREx's linear variable filter.
+    wavelength because of SPHEREx's linear variable filter. If ``grayscale``
+    is True, rows are not tinted by wavelength at all -- the frame is plain
+    intensity throughout, which also disables ``context_gray``'s dimming
+    (there is no colored foreground left to distinguish it from). If
+    ``invert`` is also True, the rendered frame is a photographic negative
+    (bright <-> dark, on a white instead of black page).
     """
     x = np.asarray(img2d, dtype=float)
 
@@ -319,24 +349,37 @@ def render_frame_lambda_by_row(
     t = np.clip(t, 0.0, 1.0)
     t[~np.isfinite(t)] = 0.5
 
-    cmap = cm.get_cmap(cmap_name)
-    row_rgb = cmap(t)[:, :3]  # (ny, 3)
-
+    cmap = cm.get_cmap(cmap_name)  # still needed below for the colorbar, even in grayscale mode
     rgb_img = np.zeros((ny, nx, 3), dtype=float)
 
-    if context_gray:
+    if grayscale:
         rgb_img[..., 0] = inten
         rgb_img[..., 1] = inten
         rgb_img[..., 2] = inten
-        rgb_img *= 0.20
+    else:
+        row_rgb = cmap(t)[:, :3]  # (ny, 3)
 
-    colored = inten[:, :, None] * row_rgb[:, None, :]  # (ny, nx, 3)
-    rgb_img[mask] = colored[mask]
+        if context_gray:
+            rgb_img[..., 0] = inten
+            rgb_img[..., 1] = inten
+            rgb_img[..., 2] = inten
+            rgb_img *= 0.20
+
+        colored = inten[:, :, None] * row_rgb[:, None, :]  # (ny, nx, 3)
+        rgb_img[mask] = colored[mask]
+
+    if invert:
+        rgb_img = 1.0 - rgb_img
+
+    # The figure/axes background and all text/tick/outline/marker colors swap with
+    # `invert`; the colorbar's own rainbow gradient is left alone either way.
+    bg_color = "white" if invert else "black"
+    fg_color = "black" if invert else "white"
 
     style = (lambda_colorbar_style or "top").lower()
 
     fig = plt.figure(figsize=(5.2, 5.2), dpi=160)
-    fig.patch.set_facecolor("black")
+    fig.patch.set_facecolor(bg_color)
 
     if show_lambda_colorbar and style != "right":
         # Image first (bottom), then the colorbar (top), so tick labels are not hidden.
@@ -348,12 +391,12 @@ def render_frame_lambda_by_row(
         cax = None
         ax = fig.add_axes([0.00, 0.00, 1.00, 1.00])
 
-    ax.set_facecolor("black")
+    ax.set_facecolor(bg_color)
     for sp in ax.spines.values():
         sp.set_visible(False)
 
     if cax is not None:
-        cax.set_facecolor("black")
+        cax.set_facecolor(bg_color)
         for sp in cax.spines.values():
             sp.set_visible(False)
         cax.patch.set_alpha(0.0)
@@ -394,25 +437,25 @@ def render_frame_lambda_by_row(
                 full = max(1e-6, lam_bar_max - lam_bar_min)
                 frac = np.clip(dlam / full, 0.0, 1.0)
                 shade_alpha = float(np.clip(0.03 + 0.18 * frac, 0.03, 0.20))
-                cbar.ax.axvspan(x0, x1, color="white", alpha=shade_alpha, zorder=2)
+                cbar.ax.axvspan(x0, x1, color=fg_color, alpha=shade_alpha, zorder=2)
 
-                cbar.ax.axvline(x0, color="white", linewidth=1.2, alpha=0.95, zorder=3)
-                cbar.ax.axvline(x1, color="white", linewidth=1.2, alpha=0.95, zorder=3)
+                cbar.ax.axvline(x0, color=fg_color, linewidth=1.2, alpha=0.95, zorder=3)
+                cbar.ax.axvline(x1, color=fg_color, linewidth=1.2, alpha=0.95, zorder=3)
 
             if np.isfinite(target_lam):
                 xt = float(np.clip(target_lam, lam_bar_min, lam_bar_max))
-                cbar.ax.axvline(xt, color="white", linewidth=2.0, alpha=0.95, zorder=4)
+                cbar.ax.axvline(xt, color=fg_color, linewidth=2.0, alpha=0.95, zorder=4)
                 cbar.ax.annotate(
                     "",
                     xy=(xt, 0.02),
                     xycoords=("data", "axes fraction"),
                     xytext=(xt, 0.95),
                     textcoords=("data", "axes fraction"),
-                    arrowprops=dict(arrowstyle="-|>", color="white", lw=1.2),
+                    arrowprops=dict(arrowstyle="-|>", color=fg_color, lw=1.2),
                     zorder=5,
                 )
 
-            cbar.ax.tick_params(axis="x", colors="white", labelsize=8, pad=1, length=3, width=0.8)
+            cbar.ax.tick_params(axis="x", colors=fg_color, labelsize=8, pad=1, length=3, width=0.8)
             for tick in cbar.ax.get_xticklabels():
                 tick.set_clip_on(False)
             cbar.ax.xaxis.set_ticks_position("bottom")
@@ -421,13 +464,13 @@ def render_frame_lambda_by_row(
 
             cax.tick_params(left=False, labelleft=False)
             cax.set_frame_on(False)
-            cbar.outline.set_edgecolor("white")
+            cbar.outline.set_edgecolor(fg_color)
             try:
                 cbar.outline.set_linewidth(0.6)
             except Exception:
                 pass
 
-            cax.set_facecolor((0, 0, 0, 0.10))
+            cax.set_facecolor((1, 1, 1, 0.10) if invert else (0, 0, 0, 0.10))
             cax.set_yticks([])
 
     fig.savefig(out_png, facecolor=fig.get_facecolor(), edgecolor="none")

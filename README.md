@@ -19,6 +19,13 @@ for the official SPHEREx data products.
   false-color RGB cutouts.
 - **Single-wavelength frames:** generate a clean monochromatic image at any specific wavelength
   of interest.
+- **Grayscale option:** `--grayscale` on `spherex-mosaic`/`spherex-merge`/`spherex-animate`/
+  `spherex-get` renders the image itself in plain black/white intensity instead of a per-wavelength
+  tint (the colorbar still shows where you are in the spectrum) -- the eye picks out faint extended
+  structure more easily in grayscale than in a single hue.
+- **Invert (negative) option:** `--invert` on the same commands flips the render like a photographic
+  negative -- bright emission goes dark on a light background instead of light on dark. Combine it
+  with `--grayscale` for the classic black-on-white look astronomers often print.
 - **Any sky field:** point to a target's coordinates, or just its name, and visualize any region
   SPHEREx has covered.
 - **One-command pipeline:** `spherex-get` resolves a target, queries IRSA, downloads the data, and
@@ -104,6 +111,16 @@ spherex-get --target "M31" --size_deg 2.0 --mosaic 3.3
 ```
 
 ![Andromeda at 3.3 um, the PAH emission feature, built with the recipe above](docs/img/demo_Andromeda_pah_3p3um.png)
+
+Add `--grayscale` to any of the commands above for plain black/white intensity instead -- often
+easier to pick out faint extended structure in, like the dust lane and disk here:
+
+![The same 3.3 um PAH image rendered with --grayscale](docs/img/demo_Andromeda_pah_3p3um_grayscale.png)
+
+Add `--invert` on top for a photographic negative -- dark features on a light background, the
+classic print look:
+
+![The same 3.3 um PAH image rendered with --grayscale --invert](docs/img/demo_Andromeda_pah_3p3um_grayscale_invert.png)
 
 ### The general one-command pipeline
 

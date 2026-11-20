@@ -83,6 +83,25 @@ def _add_weighting_arg(ap: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_grayscale_arg(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument(
+        "--grayscale",
+        action="store_true",
+        help="Render the image itself in plain black/white intensity instead of tinting it by "
+        "wavelength (the colorbar, with its moving marker, still shows where you are in the "
+        "spectrum either way). The eye often picks out faint structure more easily in grayscale "
+        "than in a single hue.",
+    )
+    ap.add_argument(
+        "--invert",
+        action="store_true",
+        help="Invert the rendered image like a photographic negative: what would be black is "
+        "white and what would be white is black (background, text and the colorbar's own ticks "
+        "swap too; the colorbar's rainbow gradient itself is left unchanged). Combine with "
+        "--grayscale for a classic black-on-white (or white-on-black) look.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # spherex-mosaic
 # ---------------------------------------------------------------------------
@@ -118,6 +137,7 @@ def mosaic() -> None:
     ap.add_argument("--min_overlap_px", type=int, default=30)
     _add_cleaning_args(ap)
     _add_weighting_arg(ap)
+    _add_grayscale_arg(ap)
     args = ap.parse_args()
 
     bad_bits = _bad_bits_from_arg(args.bad_bits)
@@ -168,6 +188,8 @@ def mosaic() -> None:
         dlambda=args.dlambda,
         coverage_frac=cov,
         fov_deg=animate.fov_deg_from_wcs(ref_wcs, ref_shape),
+        grayscale=args.grayscale,
+        invert=args.invert,
     )
     print(f"[DONE] {out_path}")
 
@@ -216,6 +238,7 @@ def merge() -> None:
         default=200,
         help="Minimum overlap pixels between tiles to trust their relative offset.",
     )
+    _add_grayscale_arg(ap)
     args = ap.parse_args()
 
     roi_box = roi_mod.roi_from_args(args)
@@ -270,6 +293,8 @@ def merge() -> None:
             dlambda=dlambda_um or 0.0,
             coverage_frac=coverage,
             fov_deg=animate.fov_deg_from_wcs(ref_wcs, ref_shape),
+            grayscale=args.grayscale,
+            invert=args.invert,
         )
         print(f"[DONE] {png_path}")
 
@@ -532,6 +557,7 @@ def animate() -> None:
     ap.add_argument("--min_overlap_px", type=int, default=30)
     _add_cleaning_args(ap)
     _add_weighting_arg(ap)
+    _add_grayscale_arg(ap)
     args = ap.parse_args()
 
     from spherexstack import animate as animate_mod
@@ -643,6 +669,8 @@ def _render_and_write(args, animate_mod, mosaics, coverages, bin_centers, dlambd
             dlambda=dlambda,
             coverage_frac=cov,
             fov_deg=fov_deg,
+            grayscale=args.grayscale,
+            invert=args.invert,
         )
         frame_paths.append(out_png)
 
@@ -781,6 +809,8 @@ def _animate_raw(args: argparse.Namespace, bad_bits: list[str], animate_mod) -> 
             context_gray=True,
             show_lambda_colorbar=True,
             lambda_colorbar_style="top",
+            grayscale=args.grayscale,
+            invert=args.invert,
         )
         frame_paths.append(out_png)
 
@@ -830,6 +860,7 @@ def get() -> None:
     ap.add_argument("--min_overlap_px", type=int, default=30)
     _add_cleaning_args(ap)
     _add_weighting_arg(ap)
+    _add_grayscale_arg(ap)
     ap.add_argument("--animate", action="store_true", help="Also render a GIF sweeping the cube's wavelength bins.")
     ap.add_argument("--fps", type=float, default=6.0)
     ap.add_argument("--sec_per_frame", type=float, default=0.4)
@@ -1010,6 +1041,8 @@ def get() -> None:
                 dlambda=args.dlambda,
                 coverage_frac=cov,
                 fov_deg=fov_deg,
+                grayscale=args.grayscale,
+                invert=args.invert,
             )
             frame_paths.append(out_png)
         if frame_paths:
@@ -1085,6 +1118,8 @@ def get() -> None:
                 dlambda=args.dlambda,
                 coverage_frac=cov,
                 fov_deg=animate.fov_deg_from_wcs(ref_wcs, ref_shape),
+                grayscale=args.grayscale,
+                invert=args.invert,
             )
             print(f"[DONE] Single-wavelength mosaic: {mosaic_path} (coverage {100 * cov:.1f}%)")
 
