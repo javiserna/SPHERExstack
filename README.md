@@ -265,12 +265,12 @@ spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 \
     --feature h2o co2 pah --auto-rgb --out my_field
 ```
 
-Here's one epoch of what a two-feature run like `--feature h2o pah --out onc_nebula` actually
+Here's one epoch of what a two-feature run like `--feature h2o pah --out Orion_A_cloud` actually
 produces (each feature gets its own `tau_maps/<name>/` subfolder once more than one is requested
 in the same command), for the Orion Nebula Cluster, water ice next to PAH emission over the same
 patch of sky:
 
-![Water-ice optical depth map of the Orion Nebula Cluster, one epoch](docs/img/demo_onc_h2o_bw.png)
+![Water-ice optical depth map of the Orion A Cloud, one epoch](docs/img/demo_onc_h2o_bw.png)
 ![3.3 um PAH emission map of the same field and epoch](docs/img/demo_onc_pah_wb.png)
 
 Both are the same kind of grayscale map; the PAH one just has the black/white sense flipped so
