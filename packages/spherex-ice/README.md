@@ -33,8 +33,8 @@ It's built on top of [`spherexstack`](../..), this repo's core package one level
 handles querying IRSA, downloading cutouts, and reprojecting/coadding exposures onto a common
 pixel grid. What this package adds on top is specific to feature mapping, grouping exposures into
 observation epochs, the continuum-interpolation math, contour masks, and multi-feature
-composites. The [repo-level README](../../README.md) covers the shared stuff, the two-package
-layout, how a flaky download gets retried, and what to expect time- and disk-wise on a big field.
+composites. The [repo-level README](../../README.md) covers the shared stuff, how a flaky
+download gets retried, and what to expect time- and disk-wise on a big field.
 
 ## Science cases
 
@@ -240,9 +240,11 @@ spherex-ice-map --epochs epochs.json --roi manifest.roi.json --epoch all --featu
 ## Contour maps
 
 Built automatically alongside every map (skip with `--no-contour`), a boundary at
-`--contour_level` that defaults to each feature's own level, 0.5 tau for H2O, 0.2 tau for CO2/CO,
-or for an emission feature (or `--feature custom`) 30% of that epoch's own 95th-percentile signal,
-since there's no single physical cutoff that works across lines of wildly different brightness.
+`--contour_level` that defaults to each feature's own level, 0.5 tau for H2O, 0.2 tau for CO2/CO
+(same flat 0.2 for `--feature custom`, which is always treated as absorption, see the root
+README's [Customizing bands](../../README.md#customizing-bands-measuring-your-own-line-or-just-the-continuum)),
+or for an emission feature 30% of that epoch's own 95th-percentile signal, since there's no single
+physical cutoff that works across lines of wildly different brightness.
 It comes out two ways:
 
 - `tau_epochNN_contour.png`, the same map, with the contour line drawn right on top, so you can

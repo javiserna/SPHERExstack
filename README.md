@@ -1,5 +1,3 @@
-![logo](docs/img/logo.jpeg)
-
 **Point it at any patch of sky and get back a real SPHEREx picture, start to finish, in one
 command.**
 
@@ -13,8 +11,9 @@ wavelength. No IRSA queries to hand-write, no FITS wrangling, just a target and 
 ![Wavelength sweep of Andromeda (M31), built by this package](docs/img/demo_lambda_slices_Andromeda.gif)
 
 *Andromeda (M31), swept across SPHEREx's full 0.75-5 µm range. Each frame is a separate image
-built from every exposure whose own wavelength lands within 0.1 µm of that frame's center, so as
-the GIF plays you're watching the same galaxy at one narrow wavelength window after another.*
+built from every exposure whose own wavelength lands close to that frame's center (0.1 µm is the
+pipeline's default window width), so as the GIF plays you're watching the same galaxy at one
+narrow wavelength window after another.*
 
 ## What do you want to do?
 
@@ -25,16 +24,18 @@ command below is complete and really works, nothing left out.
 ### A picture at a single wavelength
 
 ```bash
-spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3 --out m31
 ```
 
-Writes `m31/mosaic_3.30um.png`, one clean image at 3.3 µm (the PAH dust feature, as an example).
-Change `3.3` to any wavelength between 0.75 and 5, in microns.
+`--out m31` is just a folder name you pick, call it whatever you want. Writes
+`m31/mosaic_3.30um.png`, one clean image at 3.3 µm (the PAH dust feature, as an example). Change
+`3.3` to any wavelength between 0.75 and 5, in microns. Leave `--out` off entirely and it'll name
+the folder after your coordinates instead.
 
 ### The full spectral cube, every wavelength at once
 
 ```bash
-spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate --out m31
 ```
 
 Writes `m31/cube.fits` (the cube itself, one image per wavelength bin) and `m31/slices.gif`, a
@@ -43,7 +44,7 @@ movie sweeping through all of them, the same kind of GIF shown above.
 ### A false-color RGB picture from three wavelengths
 
 ```bash
-spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --rgb 4.57 1.94 0.96
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --rgb 4.57 1.94 0.96 --out m31
 ```
 
 Writes `m31/rgb.png`. The three numbers are the wavelengths, in microns, that become the red,
@@ -55,8 +56,9 @@ green, and blue channels.
 spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feature h2o --out my_field_h2o
 ```
 
-Writes `my_field_h2o/tau_maps/h2o/tau_median.png`. Swap `--feature h2o` for `co2` or `pah` to map
-those instead. This one case has a lot more to it (stacking several epochs, combining features
+Writes `my_field_h2o/tau_maps/tau_median.png`. Swap `--feature h2o` for `co2` or `pah` to map
+those instead (the `h2o` subfolder only shows up when you ask for more than one `--feature` in the
+same command, see below). This one case has a lot more to it (stacking several epochs, combining features
 into one picture, checking a pixel's real spectrum), so once this basic command makes sense, read
 [Mapping a named feature](#mapping-a-named-feature-water-ice-co2-ice-pah-emission) below for the
 rest.
@@ -184,7 +186,7 @@ Or skip straight to one command. `spherex-get --mosaic` does the same thing, and
 full cube alongside it:
 
 ```bash
-spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3 --out m31
 ```
 
 ![Andromeda at 3.3 um, the PAH emission feature, built with the recipe above](docs/img/demo_Andromeda_pah_3p3um.png)
@@ -202,13 +204,14 @@ And `--invert` on top of that for the classic print look, dark on light:
 
 If you want a cube, or just a picture, for a whole field, `spherex-get` is the one-stop shop. It
 queries IRSA, downloads everything (progress bar and ETA included), and builds the spectral cube,
-in one call, picking its own file names so you never have to:
+in one call, picking the output file names inside `--out` for you:
 
 ```bash
-spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate --rgb 4.57 1.94 0.96
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate --rgb 4.57 1.94 0.96 --out m31
 ```
 
-That writes everything under `./m31/`, starting with `cube.fits`, and since `--animate`/`--rgb`
+That writes everything under `m31/` (whatever name you give `--out`; leave it off and it names
+the folder after your RA/Dec instead), starting with `cube.fits`, and since `--animate`/`--rgb`
 were given, also `slices.gif` and `rgb.png` (toss in `--mosaic 3.3` for a single-wavelength
 `mosaic_3.30um.png` too). It prints the `--list`/`--roi` paths it used, so you can reuse them with
 any command below without downloading a thing twice. A bigger `--size_deg` fills in more of the
@@ -260,8 +263,10 @@ spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 \
     --feature h2o co2 pah --auto-rgb --out my_field
 ```
 
-Here's one epoch of what the first two commands above actually produce, for the Orion Nebula
-Cluster, water ice next to PAH emission over the same patch of sky:
+Here's one epoch of what a two-feature run like `--feature h2o pah --out onc_nebula` actually
+produces (each feature gets its own `tau_maps/<name>/` subfolder once more than one is requested
+in the same command), for the Orion Nebula Cluster, water ice next to PAH emission over the same
+patch of sky:
 
 ![Water-ice optical depth map of the Orion Nebula Cluster, one epoch](docs/img/demo_onc_h2o_bw.png)
 ![3.3 um PAH emission map of the same field and epoch](docs/img/demo_onc_pah_wb.png)
@@ -347,10 +352,12 @@ spherex-ice-map --epochs epochs.json --roi manifest.roi.json --epoch all --featu
 adjust the continuum bands to taste. See the
 [`--feature custom` notes](packages/spherex-ice/README.md#named-features---feature) and
 [the caveat below](#one-thing-to-keep-in-mind-about-every-map-here) on why picking bands clear of
-*other* known lines actually matters.) `--kind absorption` or `--kind emission` picks which
-formula above applies (defaults to absorption). And if all you want is the continuum band's own
-image, with no line/continuum comparison at all, `spherex-mosaic --lambda_um/--dlambda` does that
-directly.
+*other* known lines actually matters.) `--feature custom` is always measured as optical depth, the
+absorption formula above, there's no flag to switch it to the emission one instead. For an emission
+line with no preset, use `spherex-mosaic --lambda_um/--dlambda` on the line band and on a clean
+continuum band next to it, and compare the two images yourself. And if all you want is one
+continuum band's own image, with no line/continuum comparison at all, that same
+`spherex-mosaic --lambda_um/--dlambda` is the direct way to get it.
 
 ## Stacking: cubes, epochs, and multi-feature composites
 
