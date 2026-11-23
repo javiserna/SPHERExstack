@@ -1,3 +1,5 @@
+![logo](docs/img/logo.jpeg)
+
 **Point it at any patch of sky and get back a real SPHEREx picture, start to finish, in one
 command.**
 
