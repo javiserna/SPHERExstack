@@ -12,44 +12,64 @@ wavelength. No IRSA queries to hand-write, no FITS wrangling, just a target and 
 
 ![Wavelength sweep of Andromeda (M31), built by this package](docs/img/demo_lambda_slices_Andromeda.gif)
 
-## Which command do I need?
+*Andromeda (M31), swept across SPHEREx's full 0.75-5 µm range. Each frame is a separate image
+built from every exposure whose own wavelength lands within 0.1 µm of that frame's center, so as
+the GIF plays you're watching the same galaxy at one narrow wavelength window after another.*
 
-| I want to... | Run this |
-|---|---|
-| A quick picture of a field, start to finish | `spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3` |
-| One clean image at a single wavelength | `spherex-query` → `spherex-download` → `spherex-mosaic`, see [Quick start](#just-want-one-image-at-one-wavelength-three-commands) |
-| A full spectral cube, or a GIF/MP4 sweeping across wavelength | `spherex-get --animate`, or `spherex-cube` + `spherex-animate` |
-| A false-color RGB composite from three wavelengths | `spherex-get --rgb` or `spherex-rgb` |
-| A map of water ice, CO2 ice, or PAH emission | `spherex-ice-get --feature h2o` / `co2` / `pah`, see [Mapping a named feature](#mapping-a-named-feature-water-ice-co2-ice-pah-emission) |
-| The real spectrum behind one specific pixel | `spherex-ice-inspect`, see [Checking a map pixel by pixel](#checking-a-map-pixel-by-pixel) |
-| To measure some other line SPHEREx covers | `--feature custom`, see [Customizing bands](#customizing-bands-measuring-your-own-line-or-just-the-continuum) |
+## What do you want to do?
 
-## Two packages in here
+New here? Don't worry about reading the whole page first. Find the case below that matches what
+you want, copy the command into a terminal, swap in your own coordinates, and run it. Every
+command below is complete and really works, nothing left out.
 
-This repo actually holds two things:
+### A picture at a single wavelength
 
-- **`spherexstack`** is the core package (`src/spherexstack`, installed from the repo root). It
-  queries IRSA, downloads cutouts, reprojects and coadds them, and renders mosaics, cubes,
-  animations, and RGB composites, for any field and any wavelength.
-- **[`spherex-ice`](packages/spherex-ice/)** is a package built on top of it, living in
-  `packages/spherex-ice/`. It knows about specific spectral features (water, CO2, and CO ice,
-  the 3.3 µm PAH band, a handful of hydrogen recombination lines) and turns them into proper maps,
-  optical depth for the ices, flux excess for the emission lines, stacked across epochs, with
-  contours and multi-feature composites. Its own [README](packages/spherex-ice/README.md) has the
-  full rundown; this one covers `spherexstack` itself plus the stuff that's shared between both,
-  like mapping a band, checking a pixel's real spectrum, how long things take, and how much disk
-  they eat.
-
+```bash
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3
 ```
-SPHERExstack/                   repo root = the spherexstack package
-├── src/spherexstack/            core pipeline: query, download, mosaic, cube, animate, rgb
-├── tests/
-├── docs/img/
-└── packages/
-    └── spherex-ice/              spherex-ice, depends on spherexstack
-        ├── src/spherex_ice/
-        └── tests/
+
+Writes `m31/mosaic_3.30um.png`, one clean image at 3.3 µm (the PAH dust feature, as an example).
+Change `3.3` to any wavelength between 0.75 and 5, in microns.
+
+### The full spectral cube, every wavelength at once
+
+```bash
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate
 ```
+
+Writes `m31/cube.fits` (the cube itself, one image per wavelength bin) and `m31/slices.gif`, a
+movie sweeping through all of them, the same kind of GIF shown above.
+
+### A false-color RGB picture from three wavelengths
+
+```bash
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --rgb 4.57 1.94 0.96
+```
+
+Writes `m31/rgb.png`. The three numbers are the wavelengths, in microns, that become the red,
+green, and blue channels.
+
+### A map of water ice, CO2 ice, or PAH emission
+
+```bash
+spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feature h2o --out my_field_h2o
+```
+
+Writes `my_field_h2o/tau_maps/h2o/tau_median.png`. Swap `--feature h2o` for `co2` or `pah` to map
+those instead. This one case has a lot more to it (stacking several epochs, combining features
+into one picture, checking a pixel's real spectrum), so once this basic command makes sense, read
+[Mapping a named feature](#mapping-a-named-feature-water-ice-co2-ice-pah-emission) below for the
+rest.
+
+### The real spectrum behind one specific pixel of a map
+
+```bash
+spherex-ice-inspect --tau_dir my_field_h2o/tau_maps --feature h2o --cutouts my_field_h2o/.spherex_ice/cutouts
+```
+
+Opens a window with the map on screen. Double-click any spot on it and its real spectrum shows up
+in a second window, read from the raw data. More on this in
+[Checking a map pixel by pixel](#checking-a-map-pixel-by-pixel) below.
 
 ## What it can do
 
@@ -239,6 +259,15 @@ spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feat
 spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 \
     --feature h2o co2 pah --auto-rgb --out my_field
 ```
+
+Here's one epoch of what the first two commands above actually produce, for the Orion Nebula
+Cluster, water ice next to PAH emission over the same patch of sky:
+
+![Water-ice optical depth map of the Orion Nebula Cluster, one epoch](docs/img/demo_onc_h2o_bw.png)
+![3.3 um PAH emission map of the same field and epoch](docs/img/demo_onc_pah_wb.png)
+
+Both are the same kind of grayscale map; the PAH one just has the black/white sense flipped so
+the two are easy to tell apart side by side.
 
 Each run writes `tau_maps/tau_epochNN.fits`/`.png` per observation epoch, a per-pixel median
 across all of them, and a contour mask (see
