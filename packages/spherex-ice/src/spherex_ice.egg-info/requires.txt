@@ -1,0 +1,10 @@
+numpy
+astropy
+reproject
+matplotlib
+photutils
+spherexstack
+
+[dev]
+pytest
+ruff

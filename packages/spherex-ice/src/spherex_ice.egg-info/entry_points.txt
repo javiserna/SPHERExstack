@@ -1,0 +1,8 @@
+[console_scripts]
+spherex-ice-blend = spherex_ice.cli:blend
+spherex-ice-epochs = spherex_ice.cli:epochs
+spherex-ice-from-cube = spherex_ice.cli:from_cube
+spherex-ice-get = spherex_ice.cli:get
+spherex-ice-inspect = spherex_ice.cli:inspect
+spherex-ice-map = spherex_ice.cli:map_
+spherex-ice-rgb = spherex_ice.cli:rgb

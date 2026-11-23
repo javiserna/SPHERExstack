@@ -4,7 +4,7 @@ For each row of a manifest produced by :mod:`spherexstack.query`, downloads a
 cutout (``/ibe/cutout``, not the full 2040x2040 px / ~71.6 MB frame) centered
 on the same ROI used in the query, instead of the full frame. The cutout keeps
 native resolution (~6.2"/px) and only the HDUs the pipeline needs (``IMAGE``,
-``FLAGS``, ``WCS-WAVE``, plus ``VARIANCE``/``ZODI``/``PSF`` on request).
+``FLAGS``, ``WCS-WAVE``, plus ``VARIANCE``/``ZODI``/``EPSF`` on request).
 
 Resumable: a file that already exists with a size > 0 is skipped.
 """
@@ -30,10 +30,11 @@ CUTOUT_URL = "https://irsa.ipac.caltech.edu/ibe/cutout"
 DATA_PREFIX = "ibe/data/"
 
 # The pipeline only reads IMAGE, FLAGS and WCS-WAVE (plus VARIANCE for ivar
-# weighting). The other HDUs the cutout brings (ZODI, and especially PSF,
-# which alone is ~50% of the file) are dropped by default to save ~60% of
-# disk space, with no loss of resolution or quality for this technique. Use
-# --keep-hdus to keep them all (e.g. to add VARIANCE for ivar weighting).
+# weighting). The other HDUs the cutout brings (ZODI, and especially EPSF
+# -- PSF on data older than QR3/DR1 -- which alone is ~50% of the file) are
+# dropped by default to save ~60% of disk space, with no loss of resolution
+# or quality for this technique. Use --keep-hdus to keep them all (e.g. to
+# add VARIANCE for ivar weighting).
 KEEP_HDUS_DEFAULT = ("PRIMARY", "IMAGE", "FLAGS", "WCS-WAVE")
 
 
@@ -113,7 +114,56 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "(IMAGE,FLAGS,WCS-WAVE + PRIMARY), ~60%% less space. Use --keep-hdus=ALL to keep everything "
         "(needed for VARIANCE, e.g. for --weighting ivar).",
     )
+    ap.add_argument(
+        "--retry-passes",
+        type=int,
+        default=2,
+        help="After the main download pass, how many extra passes to make over just the files "
+        "still missing (e.g. a transient timeout/connection error) before giving up on them -- each "
+        "pass retried automatically, no need to re-run the command by hand. Default: 2. Set to 0 "
+        "to disable (a single pass, same as before this option existed; download_one's own 3 "
+        "per-file retries inside a pass still apply either way).",
+    )
     return ap
+
+
+def _run_batch(
+    rows: list[dict],
+    roi: dict,
+    cutout_size_deg: float,
+    outdir: Path,
+    keep_hdus: tuple[str, ...],
+    workers: int,
+    bar: ProgressBar,
+) -> tuple[list[Path], list[Path], list[tuple[dict, Path, str]], int]:
+    """Download one pass over ``rows``. Returns ``(ok, skipped, failed, total_bytes)``, where
+    ``failed`` keeps each row dict alongside its path/error so a retry pass can resubmit the
+    exact same rows without needing to re-read the manifest."""
+    ok: list[Path] = []
+    skipped: list[Path] = []
+    failed: list[tuple[dict, Path, str]] = []
+    total_bytes = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = {
+            ex.submit(
+                download_one, row, roi["ra_center"], roi["dec_center"], cutout_size_deg, outdir, keep_hdus
+            ): row
+            for row in rows
+        }
+        for fut in as_completed(futures):
+            row = futures[fut]
+            out_path, status, nbytes = fut.result()
+            if status == "ok":
+                ok.append(out_path)
+                total_bytes += nbytes
+            elif status == "skip":
+                skipped.append(out_path)
+                total_bytes += nbytes
+            else:
+                failed.append((row, out_path, status))
+                bar.interrupt(f"[WARN] {out_path.name}: {status}")
+            bar.update()
+    return ok, skipped, failed, total_bytes
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -144,33 +194,45 @@ def main(argv: list[str] | None = None) -> None:
         f"HDUs kept: {keep_hdus or 'ALL'}"
     )
 
-    ok, skipped, failed = [], [], []
-    total_bytes = 0
-
     bar = ProgressBar(total=len(rows), prefix="Downloading", unit="files")
-    with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        futures = {
-            ex.submit(download_one, row, roi["ra_center"], roi["dec_center"], cutout_size_deg, outdir, keep_hdus): row
-            for row in rows
-        }
-        for fut in as_completed(futures):
-            out_path, status, nbytes = fut.result()
-            if status == "ok":
-                ok.append(out_path)
-                total_bytes += nbytes
-            elif status == "skip":
-                skipped.append(out_path)
-                total_bytes += nbytes
-            else:
-                failed.append((out_path, status))
-                bar.interrupt(f"[WARN] {out_path.name}: {status}")
-            bar.update()
+    ok, skipped, failed, total_bytes = _run_batch(
+        rows, roi, cutout_size_deg, outdir, keep_hdus, args.workers, bar
+    )
     bar.close()
+
+    # A timeout, a dropped connection, or any other transient error on IRSA's end can leave a
+    # handful of files missing even after download_one's own 3 per-file retries (each already
+    # backed off within that one pass). Rather than requiring the user to notice and re-run the
+    # whole command by hand, automatically retry just the files still missing, for up to
+    # --retry-passes extra passes -- most transient failures clear up within one or two retries.
+    retry_pass = 0
+    while failed and retry_pass < args.retry_passes:
+        retry_pass += 1
+        retry_rows = [row for row, _path, _err in failed]
+        print(
+            f"[WARN] {len(failed)} file(s) failed to download -- retry pass {retry_pass}/{args.retry_passes} "
+            f"over just those files (the rest are already on disk, not re-downloaded):"
+        )
+        for _row, p, err in failed:
+            print(f"   {p.name}: {err}")
+        retry_bar = ProgressBar(total=len(retry_rows), prefix=f"Retry pass {retry_pass}", unit="files")
+        retry_ok, retry_skipped, failed, retry_bytes = _run_batch(
+            retry_rows, roi, cutout_size_deg, outdir, keep_hdus, args.workers, retry_bar
+        )
+        retry_bar.close()
+        ok.extend(retry_ok)
+        skipped.extend(retry_skipped)
+        total_bytes += retry_bytes
 
     print(f"[DONE] ok={len(ok)} skip={len(skipped)} fail={len(failed)}  total on disk={total_bytes / 1e9:.2f} GB")
     if failed:
-        print("[WARN] Failed (check connectivity or the manifest's 'uri'):")
-        for p, err in failed:
+        print(
+            f"[WARN] {len(failed)} file(s) still missing after {1 + args.retry_passes} total pass(es) -- "
+            "giving up on them and continuing with what downloaded successfully. Check connectivity or "
+            "the manifest's 'uri', then re-run this same spherex-download command (already-downloaded "
+            "files are skipped, only these will be attempted again):"
+        )
+        for _row, p, err in failed:
             print(f"   {p.name}: {err}")
 
     all_files = sorted(str(p) for p in outdir.glob("*.fits"))

@@ -1,52 +1,101 @@
-<img src="docs/img/logo.jpeg" alt="logo" width="700">
+# SPHERExstack
 
-**Stack, slice, and animate any field of the SPHEREx sky survey.**
+**Point it at any patch of sky and get back a real SPHEREx picture, start to finish, in one
+command.**
 
-`SPHERExstack` is a tool to process and visualize any region of the sky across the 0.7–5 µm
-wavelength range retrieved from [SPHEREx](https://spherex.caltech.edu/) Level 2 spectral images
-on [IRSA](https://irsa.ipac.caltech.edu/), turning raw observations into monochromatic spectral
-cubes, custom false-color RGB images, and shareable animations. It is meant for exploration,
-visualization, and quick-look science of extended emission and absorption.
+SPHEREx scans the whole sky from 0.75 to 5 µm, and most of that data is just sitting on
+[IRSA](https://irsa.ipac.caltech.edu/), waiting for someone to look at it. This project does
+exactly that. Give it coordinates, and it pulls the SPHEREx Level 2 exposures
+that cover that spot, cleans them up, and hands you back something you can actually look at, a
+monochromatic image, a false-color RGB, a full spectral cube, or a GIF sweeping across
+wavelength. No IRSA queries to hand-write, no FITS wrangling, just a target and a command.
 
 ![Wavelength sweep of Andromeda (M31), built by this package](docs/img/demo_lambda_slices_Andromeda.gif)
 
-## Features
+## Which command do I need?
 
-- **Spectral image cubes (GIF / MP4):** stack monochromatic frames along wavelength to animate
-  how any sky field looks from 0.7 to 5 µm.
-- **Custom RGB images:** choose any three wavelengths within 0.7–5 µm to compose tailored
-  false-color RGB cutouts.
-- **Single-wavelength frames:** generate a clean monochromatic image at any specific wavelength
-  of interest.
-- **Grayscale option:** `--grayscale` on `spherex-mosaic`/`spherex-merge`/`spherex-animate`/
-  `spherex-get` renders the image itself in plain black/white intensity instead of a per-wavelength
-  tint (the colorbar still shows where you are in the spectrum) -- the eye picks out faint extended
-  structure more easily in grayscale than in a single hue.
-- **Invert (negative) option:** `--invert` on the same commands flips the render like a photographic
-  negative -- bright emission goes dark on a light background instead of light on dark. Combine it
-  with `--grayscale` for the classic black-on-white look astronomers often print.
-- **Any sky field:** point to a target's coordinates, or just its name, and visualize any region
-  SPHEREx has covered.
-- **One-command pipeline:** `spherex-get` resolves a target, queries IRSA, downloads the data, and
-  builds the cube in a single call — with a live progress bar and an ETA for the download, since
-  that step's wall-clock time depends a lot on how big a field you ask for.
+| I want to... | Run this |
+|---|---|
+| A quick picture of a field, start to finish | `spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3` |
+| One clean image at a single wavelength | `spherex-query` → `spherex-download` → `spherex-mosaic`, see [Quick start](#just-want-one-image-at-one-wavelength-three-commands) |
+| A full spectral cube, or a GIF/MP4 sweeping across wavelength | `spherex-get --animate`, or `spherex-cube` + `spherex-animate` |
+| A false-color RGB composite from three wavelengths | `spherex-get --rgb` or `spherex-rgb` |
+| A map of water ice, CO2 ice, or PAH emission | `spherex-ice-get --feature h2o` / `co2` / `pah`, see [Mapping a named feature](#mapping-a-named-feature-water-ice-co2-ice-pah-emission) |
+| The real spectrum behind one specific pixel | `spherex-ice-inspect`, see [Checking a map pixel by pixel](#checking-a-map-pixel-by-pixel) |
+| To measure some other line SPHEREx covers | `--feature custom`, see [Customizing bands](#customizing-bands-measuring-your-own-line-or-just-the-continuum) |
 
-## How it works
+## Two packages in here
 
-1. **Query** IRSA's TAP/ADQL service for every SPHEREx Level 2 science exposure whose footprint falls in an RA/Dec box (optionally filtered to only exposures whose spectral range covers a target wavelength).
-2. **Download** a server-side cutout (`/ibe/cutout`) for each exposure, cropped to the same box, instead of the full ~72 MB detector frame.
-3. **Mask** bad pixels using the `FLAGS` quality HDU (hot pixels, saturation, transients, persistence, ...) and in-paint them.
-4. Look up each pixel's **wavelength** from the `WCS-WAVE` table via the alternate WCS key `'W'` (FITS Paper III "WAVE-TAB"), since SPHEREx's linear variable filter means wavelength varies across the detector, not just by exposure.
-5. **Reproject** every exposure onto a common TAN sky grid.
-6. **Match backgrounds** between overlapping exposures: an additive per-exposure offset is solved so that regions covered by different exposures don't show visible seams from slightly different residual background/zodiacal subtraction.
-7. **Bin by wavelength and coadd** in streaming mode (one exposure at a time, memory bounded by the output grid, not by the number of exposures).
-8. Write the result as **FITS** (mosaics, cubes), **GIF/MP4** (wavelength sweeps), **PNG** (single-wavelength previews and RGB composites).
+This repo actually holds two things:
 
-**Why this works at all:** SPHEREx revisits the same patch of sky with different pointings (dithers). Its linear variable filter (LVF) means a given detector row (and therefore wavelength) sees a different part of the sky on each visit. Combining many dithered visits lets you reassemble, for a fixed sky position, a spectrum sampled from pixels that individually only ever saw one narrow wavelength slice, in effect building a spectral cube out of many single-wavelength-per-pixel snapshots. The more exposures cover your field, the fewer gaps you'll see in each wavelength bin, see [Limitations](#limitations).
+- **`spherexstack`** is the core package (`src/spherexstack`, installed from the repo root). It
+  queries IRSA, downloads cutouts, reprojects and coadds them, and renders mosaics, cubes,
+  animations, and RGB composites, for any field and any wavelength.
+- **[`spherex-ice`](packages/spherex-ice/)** is a package built on top of it, living in
+  `packages/spherex-ice/`. It knows about specific spectral features (water, CO2, and CO ice,
+  the 3.3 µm PAH band, a handful of hydrogen recombination lines) and turns them into proper maps,
+  optical depth for the ices, flux excess for the emission lines, stacked across epochs, with
+  contours and multi-feature composites. Its own [README](packages/spherex-ice/README.md) has the
+  full rundown; this one covers `spherexstack` itself plus the stuff that's shared between both,
+  like mapping a band, checking a pixel's real spectrum, how long things take, and how much disk
+  they eat.
 
-## Installation
+```
+SPHERExstack/                   repo root = the spherexstack package
+├── src/spherexstack/            core pipeline: query, download, mosaic, cube, animate, rgb
+├── tests/
+├── docs/img/
+└── packages/
+    └── spherex-ice/              spherex-ice, depends on spherexstack
+        ├── src/spherex_ice/
+        └── tests/
+```
 
-Requires Python ≥ 3.10.
+## What it can do
+
+- **Spectral cubes, as GIF or MP4.** Stack monochromatic frames along wavelength and watch a
+  field change from 0.7 to 5 µm.
+- **Custom RGB images.** Pick any three wavelengths in that range and compose a false-color
+  cutout.
+- **One clean image at one wavelength**, when that's all you actually need.
+- **Grayscale and invert rendering.** `--grayscale` drops the per-wavelength color tint in favor
+  of plain black-and-white intensity (the colorbar still tells you where you are in the
+  spectrum); the eye tends to pick out faint extended structure more easily this way than in a
+  single hue. Add `--invert` on top for the classic photographic-negative look, dark structure on
+  a light background, the kind of thing people actually print.
+- **Point it at any patch of sky.** Give it RA/Dec coordinates and it'll go find whatever SPHEREx
+  has of that spot.
+- **One command, start to finish.** `spherex-get` queries IRSA, downloads everything with a live
+  progress bar and an ETA, and builds the cube, all in one call.
+
+## How it actually works
+
+1. Query IRSA's TAP service for every SPHEREx Level 2 exposure whose footprint lands inside an
+   RA/Dec box (optionally only the ones whose spectral range covers a wavelength you care about).
+2. Download a server-side cutout for each one (`/ibe/cutout`), cropped to that same box, instead
+   of pulling down the full ~72 MB detector frame.
+3. Mask out bad pixels using the `FLAGS` quality HDU (hot pixels, saturation, transients,
+   persistence) and paint over them.
+4. Look up each pixel's actual wavelength from the `WCS-WAVE` table (SPHEREx's linear variable
+   filter means wavelength shifts across the detector, not just from one exposure to the next).
+5. Reproject every exposure onto one common sky grid.
+6. Match backgrounds between overlapping exposures, so you don't get visible seams where
+   different visits had slightly different leftover background or zodiacal light.
+7. Bin everything by wavelength and coadd it, streaming one exposure at a time so memory stays
+   bounded by the output grid, not by how many exposures you threw at it.
+8. Write out FITS (mosaics, cubes), GIF/MP4 (wavelength sweeps), and PNG (single-wavelength
+   previews, RGB composites).
+
+So why does any of this work at all? SPHEREx revisits the same patch of sky from different
+pointings, so a given sky position lands on a different detector row, and therefore sees a different
+wavelength, on each pass. String enough of those dithered visits together and you can reassemble,
+pixel by pixel, a spectrum built out of snapshots that each only ever saw one narrow slice of it.
+The more exposures cover your field, the fewer gaps you'll see at any given wavelength (see
+[Limitations](#limitations) for what that looks like when coverage is thin).
+
+## Installing it
+
+You'll need Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/javiserna/SPHERExstack.git
@@ -54,36 +103,46 @@ cd SPHERExstack
 pip install -e ".[animate]"
 ```
 
-(`[animate]` pulls in `matplotlib`, `imageio` and `pillow`, needed for `spherex-animate`,
-`spherex-rgb`, and the PNG previews written by `spherex-mosaic`/`spherex-merge`/`spherex-get`.
-`spherex-query`, `spherex-download` and `spherex-cube` work without them, if you only need the
-FITS products.)
+`[animate]` pulls in `matplotlib`, `imageio`, and `pillow`, needed for `spherex-animate`,
+`spherex-rgb`, and the PNG previews that `spherex-mosaic`/`spherex-merge`/`spherex-get` write.
+If all you need is FITS output, `spherex-query`, `spherex-download`, and `spherex-cube` work
+without any of that.
 
-With conda/venv instead of installing straight into your system Python:
+Prefer a venv or conda env instead of your system Python? Same install, just activate first:
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # or: conda create -n spherexstack python=3.11 && conda activate spherexstack
 pip install -e ".[animate]"
 ```
 
-This installs eight commands onto your `PATH`: `spherex-get`, `spherex-query`,
+That gets you eight commands on your `PATH` (`spherex-get`, `spherex-query`,
 `spherex-download`, `spherex-mosaic`, `spherex-merge`, `spherex-cube`, `spherex-animate`, and
-`spherex-rgb`. Run any of them with `--help` to see every option.
+`spherex-rgb`). `--help` on any of them lists every option.
+
+**Want named features instead of, or alongside, a plain wavelength mosaic** (water/CO2/CO ice,
+PAH, the recombination lines)? Install `spherex-ice` on top, from the same clone:
+
+```bash
+pip install -e "packages/spherex-ice[dev]"
+```
+
+That adds `spherex-ice-get`, `spherex-ice-epochs`, `spherex-ice-map`, `spherex-ice-rgb`,
+`spherex-ice-blend`, `spherex-ice-from-cube`, and `spherex-ice-inspect`. More on these in
+[Mapping a named feature](#mapping-a-named-feature-water-ice-co2-ice-pah-emission) below, or go
+straight to the package's own [README](packages/spherex-ice/README.md).
 
 ## Quick start
 
-### Just want one image at one wavelength? Map a PAH feature in three commands
+### Just want one image at one wavelength? Three commands.
 
-A very common ask: "I don't need the whole cube, I just want a clean image at one specific
-wavelength" — for example the 3.3 µm PAH (polycyclic aromatic hydrocarbon) emission feature, a
-classic tracer of photo-dissociation regions and star-forming environments. This is the fastest,
-lightest path to that one image: `--lambda_um` on `spherex-query` means IRSA only returns
-exposures whose detector actually covers 3.3 µm (far fewer files to download than a full-spectrum
-query), and `spherex-mosaic` builds a single monochromatic image directly, with no spectral cube
-built at all:
+The most common ask I get is some version of "I don't need the whole cube, just a clean image at
+one wavelength." Take the 3.3 µm PAH feature as an example, a go-to tracer of photo-dissociation
+regions and star formation. This is the fastest way there. `--lambda_um` on `spherex-query` tells
+IRSA to only hand back exposures whose detector actually covers 3.3 µm (way fewer files than a
+full-spectrum query), and `spherex-mosaic` builds the single image directly, no cube involved:
 
 ```bash
-# 1. Only the exposures that actually cover 3.3 um -- a small fraction of the full-field query
+# 1. Only the exposures that actually cover 3.3 um
 spherex-query --ra_center 10.6847 --dec_center 41.269 --size_deg 2.0 \
     --lambda_um 3.3 --dlambda_um 0.1 --out manifest_pah.csv
 
@@ -91,63 +150,55 @@ spherex-query --ra_center 10.6847 --dec_center 41.269 --size_deg 2.0 \
 spherex-download --manifest manifest_pah.csv --roi manifest_pah.roi.json \
     --outdir cutouts_pah --workers 6
 
-# 3. The 3.3 um image itself, plus its FITS (MOSAIC + WEIGHT) for further analysis
+# 3. The image itself, plus FITS (MOSAIC + WEIGHT) if you want to keep analyzing it
 spherex-mosaic --list list.txt --roi manifest_pah.roi.json \
     --lambda_um 3.3 --dlambda 0.1 --out pah_3p3um.png --out_fits pah_3p3um.fits
 ```
 
-Swap `--ra_center`/`--dec_center` for your own target's coordinates (if you only have a name, the
-`spherex-get --target` shortcut below resolves it via SIMBAD for you). If step 3 comes back with
-low coverage, widen `--dlambda` (it must be ≥ the `--dlambda_um` used in step 1); a bigger
-`--size_deg` in step 1 also means more exposures and better coverage — see
-[Limitations](#limitations).
+Swap in your own coordinates for whatever field you care about. If step 3 comes back patchy, widen `--dlambda` a bit (it
+needs to be at least as wide as the `--dlambda_um` you used in step 1); a bigger `--size_deg` in
+step 1 also helps, since more exposures means better coverage (see
+[Limitations](#limitations)).
 
-**Prefer one single command?** `spherex-get` has a `--mosaic` shortcut that does the same thing
-(plus it also builds the full cube alongside it, and can resolve the target by name):
+Or skip straight to one command. `spherex-get --mosaic` does the same thing, and also builds the
+full cube alongside it:
 
 ```bash
-spherex-get --target "M31" --size_deg 2.0 --mosaic 3.3
+spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --mosaic 3.3
 ```
 
 ![Andromeda at 3.3 um, the PAH emission feature, built with the recipe above](docs/img/demo_Andromeda_pah_3p3um.png)
 
-Add `--grayscale` to any of the commands above for plain black/white intensity instead -- often
-easier to pick out faint extended structure in, like the dust lane and disk here:
+Throw `--grayscale` on any of these for plain black-and-white intensity; it's often easier to pick
+out faint structure in, like the dust lane here:
 
 ![The same 3.3 um PAH image rendered with --grayscale](docs/img/demo_Andromeda_pah_3p3um_grayscale.png)
 
-Add `--invert` on top for a photographic negative -- dark features on a light background, the
-classic print look:
+And `--invert` on top of that for the classic print look, dark on light:
 
 ![The same 3.3 um PAH image rendered with --grayscale --invert](docs/img/demo_Andromeda_pah_3p3um_grayscale_invert.png)
 
-### The general one-command pipeline
+### The one-command pipeline, for everything else
 
-**If you want a cube (or a picture) for a field, `spherex-get` is the one-stop command.** It
-resolves a target (by name, via SIMBAD, or by RA/Dec) plus a field size, queries IRSA, downloads
-the cutouts (with a live progress bar and ETA), and builds the spectral cube — all in one
-command. It picks its own manifest/cutout/cube file names inside an output directory, so you
-never have to:
+If you want a cube, or just a picture, for a whole field, `spherex-get` is the one-stop shop. It
+queries IRSA, downloads everything (progress bar and ETA included), and builds the spectral cube,
+in one call, picking its own file names so you never have to:
 
 ```bash
-spherex-get --target "M31" --size_deg 2.0 --animate --rgb 4.57 1.94 0.96
-# or, if you already have coordinates (also works if SIMBAD is unreachable):
 spherex-get --ra 10.6847 --dec 41.269 --size_deg 2.0 --animate --rgb 4.57 1.94 0.96
 ```
 
-This writes everything under `./m31/` (a directory named after the target): `cube.fits`, and
-since `--animate`/`--rgb` were given, also `slices.gif` and `rgb.png` (add `--mosaic 3.3` for a
-single-wavelength `mosaic_3.30um.png` too, as above). It prints the `--list`/`--roi` paths it used
-at the end, so you can point any of the commands below at the same files without downloading
-anything twice. A bigger `--size_deg` means more exposures covering your field, which fills in the
-wavelength coverage -- see [Limitations](#limitations) for why a small test field can come out
-with a lot of gaps.
+That writes everything under `./m31/`, starting with `cube.fits`, and since `--animate`/`--rgb`
+were given, also `slices.gif` and `rgb.png` (toss in `--mosaic 3.3` for a single-wavelength
+`mosaic_3.30um.png` too). It prints the `--list`/`--roi` paths it used, so you can reuse them with
+any command below without downloading a thing twice. A bigger `--size_deg` fills in more of the
+wavelength coverage. See [Limitations](#limitations) for why a small test field often looks
+pretty patchy.
 
 ![Andromeda composed as a false-color RGB from three wavelengths, built by --rgb](docs/img/demo_Andromeda_rgb.png)
 
-**For full control over every step** — rectangular (non-square) boxes, custom file names, tiling
-a region too large for one run, tuning background matching/cleaning/weighting per step, or
-working from cutouts you already have — use the individual commands:
+Need more control? A rectangular box, custom file names, tiling a big region, tuning
+background-matching or weighting, all of that means dropping down to the individual commands:
 
 ```bash
 spherex-query --ra_center 10.6847 --dec_center 41.269 --size_deg 2.0 --out manifest.csv
@@ -158,79 +209,326 @@ spherex-mosaic --list list.txt --roi manifest.roi.json --lambda_um 3.4 --dlambda
 spherex-rgb --list list.txt --roi manifest.roi.json --lambda_r 4.57 --lambda_g 1.94 --lambda_b 0.96 --out rgb.png
 ```
 
-Or run a small end-to-end example with one script:
+Or just run the demo script:
 
 ```bash
 examples/run_small_demo.sh
 ```
 
+## Mapping a named feature: water ice, CO2 ice, PAH emission
+
+`spherex-mosaic` above maps whatever wavelength you tell it to, which is great when you already
+know exactly which band you want. For the common cases of ice absorption and PAH emission,
+[`spherex-ice`](packages/spherex-ice/) goes a step further. It already knows each feature's line
+and continuum bands, it computes the right quantity for each kind of feature (optical depth for
+absorption, flux excess for emission; more on that
+[below](#optical-depth-how-ice-absorption-actually-gets-measured)), it stacks multiple epochs
+into one sturdier map, and it builds a contour for you. All in one command:
+
+```bash
+# Water ice (3.05 um), as an optical depth map
+spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feature h2o --out my_field_h2o
+
+# CO2 ice (4.27 um)
+spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feature co2 --out my_field_co2
+
+# The 3.3 um PAH emission feature (flux excess, not optical depth; see below)
+spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 --feature pah --out my_field_pah
+
+# All three together, one download, plus a false-color composite (R=H2O, G=CO2, B=PAH)
+spherex-ice-get --ra_center 86.72955 --dec_center 0.392931 --size_deg 0.5 \
+    --feature h2o co2 pah --auto-rgb --out my_field
+```
+
+Each run writes `tau_maps/tau_epochNN.fits`/`.png` per observation epoch, a per-pixel median
+across all of them, and a contour mask (see
+[Stacking](#stacking-cubes-epochs-and-multi-feature-composites) below). The
+[`spherex-ice` README](packages/spherex-ice/README.md#named-features---feature) has the full
+table of presets, including CO ice and the five hydrogen recombination lines, plus every other
+science case it covers.
+
+## Checking a map pixel by pixel
+
+Sometimes a map isn't enough and you want to see the real spectrum behind one specific pixel.
+Both packages give you a way to do that:
+
+- **From a `spherexstack` cube**, `spherex-cube`'s `CUBE` HDU is shaped `(n_bins, ny, nx)`, so
+  `CUBE[:, y, x]` is literally that pixel's binned spectrum, matched up against the wavelengths
+  in the `COVERAGE` table. Nothing fancy, just a FITS read.
+- **From `spherex-ice`'s raw exposures**, which is finer-grained (every individual exposure's own
+  flux at its own wavelength, not a binned average). `spherex-ice-inspect` opens an interactive
+  viewer over one or more already-built feature maps. Double-click a spot, and it pulls that
+  position's real spectrum straight from the cutouts still sitting on disk:
+
+  ```bash
+  spherex-ice-inspect --tau_dir my_field/tau_maps --feature h2o pah --cutouts my_field/.spherex_ice/cutouts
+  ```
+
+  This is also the easiest way to catch the kind of mix-up described
+  [below](#one-thing-to-keep-in-mind-about-every-map-here). A real line shows up as an actual dip
+  or bump at the wavelength you expect, among the raw points, not just a jump between the two
+  continuum bands. See the
+  [`spherex-ice` README](packages/spherex-ice/README.md#checking-a-pixels-real-spectrum-spherex-ice-inspect)
+  for the full walkthrough (marking several positions, saving spectra to CSV/PNG, all of it).
+
+## Optical depth: how ice absorption actually gets measured
+
+For an ice absorption line (H2O, CO2, CO), `spherex-ice` reports optical depth, tau:
+
+```
+tau = ln(F_continuum / F_line)
+```
+
+`F_line` comes from the narrow band centered on the ice line itself; `F_continuum` is the
+flux you'd expect there if the ice weren't absorbing anything, interpolated from two bands
+straddling the line, one bluer and one redder. `tau = 0` means no absorption worth talking about;
+`tau = 1` means the line's down to about 37% of the continuum (1/e); the higher it goes, the more
+ice sits along that sightline. It's a ratio, not a flux, so it doesn't care how bright the
+background star or cloud happens to be, which is exactly why a ratio, rather than a plain
+subtraction, is the right tool for an absorption feature.
+
+It's worth knowing that this is a peak, lower-bound estimate, not a full column density from
+radiative transfer. Away from a sightline toward a bright background star, the "continuum" you're
+measuring against is itself partly foreground emission, and SPHEREx's own spectral resolution
+dilutes the measured depth a little compared to the line's true peak (a small effect for the
+broad H2O band specifically; the
+[`spherex-ice` caveats](packages/spherex-ice/README.md#caveats-read-before-trusting-a-value)
+go into how much). Emission features (PAH, the recombination lines) sit *above* the continuum
+instead of below it, so a log ratio doesn't mean anything there. `spherex-ice` just reports the
+plain continuum-subtracted excess, `F_line - F_continuum`, in the same MJy/sr units SPHEREx
+images already use.
+
+## Customizing bands: measuring your own line, or just the continuum
+
+Every named `--feature` (`h2o`, `co2`, `co`, `pah`, and the five hydrogen lines) is really just
+five numbers under the hood, the line center, its half-width, and the two continuum band edges.
+None of that is hardcoded into the pipeline itself. `--feature custom` hands you those same five
+numbers directly, so you can map any narrow feature SPHEREx's 0.75–5 µm range covers, or nudge a
+preset's continuum bands if they don't quite fit your field:
+
+```bash
+spherex-ice-map --epochs epochs.json --roi manifest.roi.json --epoch all --feature custom \
+    --lam_line 2.121 --dlambda_line 0.03 \
+    --cont_blue_lo 2.00 --cont_blue_hi 2.08 \
+    --cont_red_lo 2.20 --cont_red_hi 2.28 \
+    --out_dir tau_maps_h2_2um
+```
+
+(That's H2 at 2.12 µm, just as an example of a line with no built-in preset. Check the result and
+adjust the continuum bands to taste. See the
+[`--feature custom` notes](packages/spherex-ice/README.md#named-features---feature) and
+[the caveat below](#one-thing-to-keep-in-mind-about-every-map-here) on why picking bands clear of
+*other* known lines actually matters.) `--kind absorption` or `--kind emission` picks which
+formula above applies (defaults to absorption). And if all you want is the continuum band's own
+image, with no line/continuum comparison at all, `spherex-mosaic --lambda_um/--dlambda` does that
+directly.
+
+## Stacking: cubes, epochs, and multi-feature composites
+
+"Stacking" covers a few different things here, and they all build on the same coaddition code
+under the hood.
+
+Stacking exposures into one wavelength bin is the basic move `spherex-mosaic`/`spherex-cube` make
+by default. Every exposure whose pixel-level wavelength lands within `±dlambda` of a bin center
+gets averaged (or inverse-variance-weighted with `--weighting ivar`) onto the output grid.
+Everything else is built on top of that one step.
+
+Stack enough of those bins and you get a cube. `spherex-cube --n_bins 40` repeats the step above
+across however many bins you ask for, writing out a real spectral-WCS FITS cube that
+`spherex-animate` can then sweep through as a GIF or MP4.
+
+Stack observation epochs and you get `spherex-ice-map`'s per-pixel median across them
+(`tau_median.fits`, built automatically whenever there's more than one epoch; see
+[Median across epochs](packages/spherex-ice/README.md#median-across-epochs)). This isn't just a
+nicer-looking average. A single bad epoch (one outlier exposure, a registration mismatch) only
+drags the median off if it affects more than half the epochs at that pixel. Add `--cube` and
+you'll also get a compact, re-processable summary of each epoch (31x smaller than the raw cutouts
+in one real case I measured), so you can go back and rebuild the median later, or try a different
+`--contour_level`, without re-downloading anything (`spherex-ice-from-cube`).
+
+And stack features into one picture with `spherex-ice-rgb` (literal red/green/blue channels, like
+the H2O/CO2/PAH example [above](#mapping-a-named-feature-water-ice-co2-ice-pah-emission)) or
+`spherex-ice-blend` (screen-blends 2-3 maps while keeping each one's own color, H2O's blue ice
+scale over PAH's red-hot one, say). See
+[RGB composites](packages/spherex-ice/README.md#rgb-composites-up-to-three-maps-in-one-picture)
+and [per-feature colormaps](packages/spherex-ice/README.md#per-feature-colormaps-and-blending-them-spherex-ice-blend)
+for both.
+
+## One thing to keep in mind about every map here
+
+A map here, a single-wavelength `spherex-mosaic` image just as much as a named `spherex-ice`
+feature map, only compares flux across a handful of fixed, narrow wavelength windows. It isn't
+fitting a line, it isn't identifying anything; it's just measuring how much light lands inside
+the window(s) you pointed it at. So what you get out is really "there's more or less signal here
+than elsewhere," not "this pixel definitely contains the feature I asked for." If some unrelated
+line happens to fall inside the same narrow window, the map has no way of telling the difference.
+
+This isn't a corner case I'm inventing to cover myself. One of the named presets runs right into
+it, Br-beta's line sits inside H2O's own blue continuum band (see
+[the `spherex-ice` caveats](packages/spherex-ice/README.md#the-one-thing-every-map-here-can-get-fooled-by)
+for the measured effect), so a strong Br-beta source can quietly push an H2O map's reading in the
+wrong direction. The same thing can happen with `--feature custom`'s hand-picked bands, or a plain
+`spherex-mosaic --lambda_um` near a line you didn't account for. Nothing stops it. Treat any map
+here as "where this signal looks stronger or weaker," and before you report a pixel as a detection
+of something specific, pull up its real spectrum with `spherex-ice-inspect` (see
+[Checking a map pixel by pixel](#checking-a-map-pixel-by-pixel) above) and make sure what you're
+seeing actually looks like the line you think it is.
+
 ## Outputs
 
-All header/column names below are taken from the actual FITS files this package writes, not assumed.
+Every header/column name below comes straight from the FITS files this package actually writes.
+Flux values in `MOSAIC` and `CUBE` are SPHEREx's native MJy/sr surface brightness by default,
+recorded in each HDU's own `BUNIT`. Pass `--units mjy` to `spherex-mosaic`/`spherex-cube` to get
+a per-pixel flux density in mJy instead, the same conversion [IRSA's own SPHEREx mosaic-cube
+tutorial](https://caltech-ipac.github.io/irsa-tutorials/spherex-mosaic/) uses before doing
+aperture photometry on it.
 
 | Command | File(s) | Contents |
 |---|---|---|
-| `spherex-get` | `<out>/manifest.csv`, `<out>/roi.json`, `<out>/cutouts/*.fits`, `<out>/list.txt` | Same as the `spherex-query`/`spherex-download` rows below, just with fixed names chosen for you inside `<out>` |
+| `spherex-get` | `<out>/manifest.csv`, `<out>/roi.json`, `<out>/cutouts/*.fits`, `<out>/list.txt` | Same as the `spherex-query`/`spherex-download` rows below, just with fixed names inside `<out>` |
 | | `<out>/cube.fits` | Same structure as `spherex-cube`'s output, below |
-| | `<out>/slices.gif`, `<out>/rgb.png` | Only with `--animate`/`--rgb`; same structure as `spherex-animate`'s and `spherex-rgb`'s output, below |
-| | `<out>/mosaic_<lambda>um.png` | Only with `--mosaic LAMBDA_UM`; same structure as `spherex-mosaic`'s PNG output, below |
-| `spherex-query` | `manifest.csv` | Columns `obs_id, s_ra, s_dec, energy_bandpassname, t_min, uri, contentlength` (one row per matching exposure) |
+| | `<out>/slices.gif`, `<out>/rgb.png` | Only with `--animate`/`--rgb`; same structure as `spherex-animate`'s and `spherex-rgb`'s output |
+| | `<out>/mosaic_<lambda>um.png` | Only with `--mosaic LAMBDA_UM`; same structure as `spherex-mosaic`'s PNG |
+| `spherex-query` | `manifest.csv` | Columns `obs_id, s_ra, s_dec, energy_bandpassname, t_min, uri, contentlength`, one row per matching exposure |
 | | `<out>.roi.json` | `ra_min, ra_max, dec_min, dec_max, ra_center, dec_center, width_deg, height_deg` |
 | `spherex-download` | `<outdir>/*.fits` | Cutout FITS, HDUs `PRIMARY, IMAGE, FLAGS, WCS-WAVE` by default (add `VARIANCE` via `--keep-hdus` for `--weighting ivar`) |
-| | `list.txt` | One cutout path per line (input to `spherex-mosaic`/`spherex-cube`/`spherex-animate`/`spherex-rgb`) |
-| `spherex-mosaic` | `<out>.png` | Single-wavelength preview, wavelength colorbar (with units and a moving marker) at top, field-of-view label bottom-right |
-| | `<out_fits>` | `PRIMARY` (empty), `MOSAIC` (float32 image, 2D WCS, `LAMBDA_UM`/`DLAMBDA_UM` header keys), `WEIGHT` (float32, total weight per pixel — an exposure count under `--weighting mean`) |
+| | `list.txt` | One cutout path per line, the input `spherex-mosaic`/`spherex-cube`/`spherex-animate`/`spherex-rgb` expect |
+| `spherex-mosaic` | `<out>.png` | Single-wavelength preview, wavelength colorbar up top, field-of-view label bottom-right |
+| | `<out_fits>` | `PRIMARY` (empty), `MOSAIC` (float32, 2D WCS, `LAMBDA_UM`/`DLAMBDA_UM` keys), `WEIGHT` (float32, total weight per pixel; an exposure count under `--weighting mean`) |
 | `spherex-merge` | `<out>` | Same `MOSAIC`/`WEIGHT` structure as `spherex-mosaic`, plus `NTILES` |
 | | `<out_png>` | Optional preview |
-| `spherex-cube` | `<out>` | `PRIMARY` (empty), `CUBE` (float32, shape `(n_bins, ny, nx)`, 3D WCS — `CTYPE1/2 = RA---TAN/DEC--TAN`, `CTYPE3 = WAVE` with `CRVAL3/CDELT3/CUNIT3` in **meters**, per the FITS WCS standard, even though `--dlambda` etc. are in microns), `WEIGHT` (float32, same shape), `COVERAGE` (binary table, one row per bin: `LAMBDA_UM`, `COVERAGE_FRAC`) |
-| `spherex-animate` | `<out>.gif`/`.mp4` | Wavelength sweep, one frame per bin (or per raw exposure in `--mode raw`) |
-| | `_frames_*/*.png` | The individual PNG frames, next to the input list or cube |
-| `spherex-rgb` | `<out>.png` | Three single-wavelength mosaics composed as (R, G, B), each stretched independently (different wavelengths can have very different flux scales); wavelengths and field of view labeled bottom-left/bottom-right |
+| `spherex-cube` | `<out>` | `PRIMARY` (empty), `CUBE` (float32, `(n_bins, ny, nx)`, 3D WCS with `CTYPE3 = WAVE` in meters, per the FITS standard, even though `--dlambda` is in microns), `WEIGHT` (same shape), `COVERAGE` (one row per bin: `LAMBDA_UM`, `COVERAGE_FRAC`) |
+| `spherex-animate` | `<out>.gif`/`.mp4` | One frame per wavelength bin (or per raw exposure in `--mode raw`) |
+| | `_frames_*/*.png` | The individual frames, next to the input list or cube |
+| `spherex-rgb` | `<out>.png` | Three single-wavelength mosaics stretched independently and composed as R/G/B; wavelengths and FOV labeled bottom-left/right |
 
 ## Limitations
 
-These are derived from the code, not assumed:
+A few things worth knowing before you lean on a result too hard:
 
-- **Spatial coverage at a fixed wavelength depends on how many exposures cover your field.** A
-  small `--size_deg` means few dithers, which means most wavelength bins will have large gaps
-  (`NaN`); a field as small as 0.7° on a side can have as few as ~8 exposures, while the same
-  field at 2.0° can have well over 100. Gaps are not filled in; per-bin coverage is always printed
-  and written to the `COVERAGE` table, so you can judge how much to trust a given slice.
-- **Coaddition is an unweighted mean by default.** `--weighting ivar` weights each pixel by `1/VARIANCE` (falling back to `mean` for any exposure without a usable `VARIANCE` HDU — re-download with `--keep-hdus` including `VARIANCE` to use it).
-- **The zodiacal light model (`ZODI` HDU) is not subtracted.** Only *relative* additive offsets between overlapping exposures are matched (to remove visible seams); absolute background levels are never calibrated against a zodiacal/background model.
-- **Wavelength binning uses each pixel's own central wavelength within a tolerance (`--dlambda`)**; the full spectral response function of SPHEREx's linear variable filter is not modeled, so the effective bandpass differs slightly from pixel to pixel within the same nominal bin.
-- **The wavelength range scanned to pick bin centers can be wider than what a cropped ROI cutout actually contains.** `spherex-cube`/`spherex-animate`/`spherex-get` (in ROI mode) set the bin centers from each file's `WCS-WAVE` lookup table range; that table can retain the full detector's wavelength span even after the `IMAGE`/`FLAGS` arrays are cropped to a small ROI by `/ibe/cutout`, so some bins near the edges of the scanned range may end up with zero coverage even though the exposure's metadata-level spectral range technically includes them. A warning is printed when this happens; `spherex-animate --min_coverage` skips the resulting empty frames.
-- **No PSF homogenization across wavelength.** Each wavelength slice is coadded as-is; no attempt is made to match or degrade PSFs between detectors/bands.
-- **Background matching in streaming (ROI) mode is sequential/incremental, not a global joint solve.** Each new exposure is compared only against the average accumulated so far in the overlap region; this is not identical to the joint least-squares solve used in the (memory-heavier) point-target legacy mode, though it removes the same kind of seam.
-- **Point-target legacy mode (`--target` on `spherex-cube`/`spherex-animate`) does not support `--weighting ivar`**; it falls back to `mean` with a warning. It is meant for quick single-target looks on a small cutout, not the primary large-ROI pipeline.
-- **`spherex-animate --mode raw`** reproduces a per-exposure, row-colored (no coaddition) visualization as a separate mode rather than a separate command; it does not bin or coadd across exposures at all.
-- **`--target` name resolution depends on SIMBAD being reachable.** `spherex-get --target` queries SIMBAD's own TAP service live; if SIMBAD is down or the name isn't recognized, use `--ra`/`--dec` instead, which never depends on any third-party service beyond IRSA itself.
-- **`spherex-get` is a convenience wrapper, not a separate implementation.** It always builds a square ROI (center + `--size_deg`); for a rectangular box, tiling a large region, or reusing cutouts you already downloaded under a different layout, use `spherex-query`/`spherex-download`/`spherex-cube` directly — `spherex-get` prints the `--list`/`--roi` paths it wrote so you can still drop down to those commands afterward.
-- **`spherex-get`'s default of 1 download worker is deliberately conservative** (so a first run behaves predictably); raise `--workers` (e.g. `--workers 6`) once you're comfortable with the pipeline. `spherex-download` itself still defaults to 6.
-- **Tested against SPHEREx Data Release 1 and Quick Release 3 (QR3) data.** Later data releases may change file formats.
-- **Not a substitute for the official SPHEREx data products or SPHEREx Science Team maps.** This is an exploration/visualization tool built from individual Level 2 exposures, not a validated science pipeline.
+Coverage at any one wavelength depends entirely on how many exposures happen to cover your
+field. A small `--size_deg` means few dithers, which means big gaps (`NaN`) in most bins. A 0.7°
+field can have as few as ~8 exposures where a 2.0° field has well over 100. Nothing fills those
+gaps in; per-bin coverage always gets printed, and it's in the `COVERAGE` table too, so you can
+judge how much to trust a given slice.
 
-## Performance notes
+Coaddition is an unweighted mean by default. `--weighting ivar` weights by `1/VARIANCE` instead
+(falling back to `mean` for any exposure without a usable `VARIANCE` HDU; re-download with
+`--keep-hdus` including it if you want to use this). The zodiacal light model (`ZODI`) is never
+subtracted either; only the *relative* offsets between overlapping exposures get matched, to kill
+seams, never an absolute background level.
 
-- The download step (`spherex-download`, or `spherex-get`'s own download phase) shows a live
-  progress bar with throughput and an estimated time remaining, since this is the step whose
-  wall-clock time varies the most — it scales with how many exposures cover your field, which
-  grows quickly with `--size_deg`.
-- Memory for `spherex-cube`/`spherex-mosaic` scales with `n_bins x grid_size`, **not** with the number of exposures: each exposure is loaded, reprojected onto only the sub-window of the output grid it overlaps, accumulated, and discarded.
-- For regions too large to fit in memory at once (or to avoid re-downloading everything if something fails partway through), build partial mosaics per sub-region with `spherex-mosaic --out_fits`, delete that sub-region's raw cutouts, and combine the partials afterward with `spherex-merge`.
-- `spherex-download` is resumable (files that already exist with nonzero size are skipped) and parallelized (`--workers`).
+Wavelength binning works off each pixel's own central wavelength within `--dlambda`; the full
+shape of SPHEREx's spectral response isn't modeled, so the effective bandpass drifts slightly
+pixel to pixel within a bin. And the wavelength range used to pick bin centers can actually be
+wider than what a cropped ROI cutout contains. The `WCS-WAVE` table can retain the full detector's
+span even after `IMAGE`/`FLAGS` get cropped by `/ibe/cutout`, so a bin near the edge of that range
+can end up empty even though the file's metadata technically claims coverage there. You'll see a
+warning when that happens; `spherex-animate --min_coverage` skips the resulting blank frames.
+
+No PSF homogenization happens across wavelength; each slice is coadded as-is. Background matching
+in the default streaming mode is sequential, each new exposure compared only against what's
+accumulated so far, not a full joint solve (the heavier, memory-hungry point-target legacy mode
+does that, but it also doesn't support `--weighting ivar`, and it's really meant for quick
+single-target looks, not the main large-ROI path). `spherex-animate --mode raw` is its own thing
+too, a per-exposure, no-coaddition visualization, not a separate command.
+
+`spherex-get` is a convenience wrapper, not its own implementation. It
+always builds a square ROI, so for a rectangle, a tiled region, or cutouts you already have laid
+out differently, go straight to `spherex-query`/`spherex-download`/`spherex-cube` (it prints the
+`--list`/`--roi` paths it wrote, so dropping down afterward is easy). Its default of 1 download
+worker is intentionally conservative for a first run; bump `--workers` once you trust it.
+`spherex-download` itself still defaults to 6.
+
+One last thing. This was built and tested against SPHEREx Quick Release 3 (QR3) and Data
+Release 1 (DR1) Level 2 data, so a later release could change the file format underneath it.
+
+## Performance, time, and disk space (read before a large field)
+
+The download step shows a live progress bar with an ETA, since it's the one step whose timing is
+genuinely hard to predict. It scales with how many exposures cover your field, which grows
+quickly with `--size_deg`, and faster still once you cross SPHEREx's native detector FOV (~3.47°,
+more on that below). Memory for `spherex-cube`/`spherex-mosaic` scales with `n_bins x grid_size`,
+not with the number of exposures, since each one gets loaded, reprojected onto just the part of
+the grid it overlaps, accumulated, and dropped. For a region too big to hold in memory at once (or to avoid
+losing everything if a run fails halfway through), build partial mosaics per sub-region with
+`spherex-mosaic --out_fits`, delete that sub-region's raw cutouts, and combine the partials
+afterward with `spherex-merge`.
+
+### Roughly what to expect at 1° vs. 5° on a side
+
+Take these as ballpark numbers, not a promise. The real figure for your field depends on how
+densely SPHEREx happens to have surveyed that patch of sky so far (it's still an early, ongoing
+survey), your connection, and `--workers`. Both `spherex-query`/`spherex-get` and
+`spherex-ice-get` print the actual exposure count and grid size for your specific field before
+downloading anything, and that's the number worth planning around, not the table below. If you're
+not sure, run a small `--size_deg` test first.
+
+| Field (square) | Relative to native FOV (~3.47°) | Exposures | Raw download | Processing |
+|---|---|---|---|---|
+| 1° x 1° | well inside it: cutouts still get cropped down | tens up to ~150 (0.7° had ~8, 2.0° had 100+ in a real test) | tens of MB up to roughly 1 GB | seconds to a couple minutes per band/bin, on an ordinary machine |
+| 5° x 5° | past it: cutouts stop getting cropped, so most exposures come back near their full ~72 MB, and a bigger area pulls in a lot more exposures to begin with | plausibly several hundred+ | tens of GB | background matching scales roughly with the *square* of exposure count per band, so this can run tens of minutes to a few hours |
+
+The jump between those two rows isn't gradual. It's that ~3.47° cutoff doing most of the damage,
+not area by itself. If you only need one feature or wavelength, filter the query first
+(`--lambda_um`, or any `--feature`); that alone usually cuts the download down a lot more than
+shrinking `--size_deg` would.
+
+### Disk fills up faster than you'd think on a large field
+
+It's the raw cutouts that eat disk, not the final products. Tens of GB is realistic once you're
+near or past that native-FOV line, and it's easy to not notice until `df` tells you. A few ways to
+keep it in check, roughly most-to-least effective:
+
+- Query only the wavelength or feature you actually need. That alone often cuts the file count
+  5-10x before anything else kicks in.
+- `spherex-ice --cube --delete-cutouts-after-cube`. Once each epoch's compact cube is written and
+  verified to load back correctly, the raw cutouts get deleted automatically. In one real field
+  this took 381 files (59 MB) down to 3 cubes (1.9 MB), about 31x smaller. The small
+  manifest/roi/epochs.json stick around in case you want to re-download later.
+- Tile and merge. Build partial mosaics with `spherex-mosaic --out_fits`, delete that tile's
+  cutouts, combine afterward with `spherex-merge`, so only one tile's worth of cutouts ever sits
+  on disk at once.
+- `--keep-hdus` (the default) already drops `PSF`/`ZODI` from every download, about 60% smaller
+  with no real loss here. Add `VARIANCE` back only if you actually need `--weighting ivar`.
+
+### A flaky download doesn't need you to babysit it
+
+A single file can fail to download for all sorts of boring reasons, a timeout, a dropped
+connection, IRSA just being slow. And that gets more likely the more files a field pulls in.
+`spherex-download` (which `spherex-get` and `spherex-ice-get` both use) already retries each file
+up to 3 times with backoff within one pass. On top of that, once the main pass finishes, it
+automatically runs up to 2 more passes (`--retry-passes`, default 2) over whatever's still
+missing, telling you which files and why each time. You shouldn't need to notice a partial
+failure and re-run anything by hand. Most of these clear up on their own within a retry or two.
+If a few files are still stubborn after all the retries, it prints their names and just carries on
+with whatever did download, instead of blowing up the whole run. You'll end up with slightly
+lower coverage in the `COVERAGE` table, not a crash. And if you do want another shot at it later,
+re-running the exact same `spherex-download` command only touches the files still missing;
+anything already on disk gets skipped, same as always.
+
+## Still growing
+
+This is an active project, not a finished one. New SPHEREx data releases, new science cases, and
+bugs people actually run into will keep shaping it. If you find something broken, have a feature
+you'd like to see, or just want to contribute code, open an issue or a pull request on
+[GitHub](https://github.com/javiserna/SPHERExstack). Community input is genuinely welcome, and it's
+part of how this is meant to keep improving.
 
 ## Data acknowledgment
 
-Users of SPHEREx/IRSA data are expected to include IRSA's required acknowledgment of the SPHEREx mission and IRSA in any publication or product derived from this package's outputs.
+If you use SPHEREx/IRSA data, IRSA asks that you include this acknowledgment in anything you
+publish or derive from this package's outputs:
 
-"This publication makes use of data products from the Spectro-Photometer for the History of the Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet Propulsion Laboratory and the California Institute of Technology, and is funded by the National Aeronautics and Space Administration."
+"This publication makes use of data products from the Spectro-Photometer for the History of the
+Universe, Epoch of Reionization and Ices Explorer (SPHEREx), which is a joint project of the Jet
+Propulsion Laboratory and the California Institute of Technology, and is funded by the National
+Aeronautics and Space Administration."
 
 ## Citation
 
 10.5281/zenodo.24388875
 
-
 ## License and contact
 
-MIT License — see [`LICENSE`](LICENSE). Maintained by Javier Serna (University of Oklahoma) 2026.
+MIT License. See [`LICENSE`](LICENSE). Maintained by Javier Serna (University of Oklahoma), 2026.

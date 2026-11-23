@@ -122,6 +122,7 @@ def save_cube_fits(
     dlambda: float,
     coverage: np.ndarray,
     extra_header: dict[str, Any] | None = None,
+    bunit: str = "MJy/sr",
 ) -> None:
     """Write a spectral cube to FITS: ``CUBE`` + ``WEIGHT`` image HDUs and a ``COVERAGE`` table.
 
@@ -140,8 +141,13 @@ def save_cube_fits(
         for k, v in extra_header.items():
             hdr[k] = v
 
-    cube_hdu = fits.ImageHDU(data=cube.astype(np.float32), header=hdr, name="CUBE")
-    weight_hdu = fits.ImageHDU(data=weight_cube.astype(np.float32), header=hdr.copy(), name="WEIGHT")
+    cube_hdr = hdr.copy()
+    cube_hdr["BUNIT"] = (bunit, "Surface brightness (native) or flux density (--units mjy)")
+    weight_hdr = hdr.copy()
+    weight_hdr["BUNIT"] = ("", "Total weight per voxel (exposure count under weighting=mean)")
+
+    cube_hdu = fits.ImageHDU(data=cube.astype(np.float32), header=cube_hdr, name="CUBE")
+    weight_hdu = fits.ImageHDU(data=weight_cube.astype(np.float32), header=weight_hdr, name="WEIGHT")
     coverage_hdu = fits.BinTableHDU.from_columns(
         [
             fits.Column(name="LAMBDA_UM", format="D", array=np.asarray(bin_centers, dtype=float)),

@@ -181,10 +181,11 @@ def build_lambda_mosaics_streaming(
     ref_wcs: WCS,
     ref_shape: tuple[int, int],
     bin_centers: np.ndarray,
-    dlambda: float,
+    dlambda: float | np.ndarray,
     match_background: bool,
     min_overlap_px: int,
     weighting: str = "mean",
+    bin_sources: list[set[Path]] | None = None,
 ) -> tuple[list[np.ndarray], list[float], list[np.ndarray]]:
     """Streaming ROI-mode mosaic builder: scalable in memory with the grid, not with exposure count.
 
@@ -196,12 +197,22 @@ def build_lambda_mosaics_streaming(
     thousand pixels per side) without holding everything in memory at once,
     unlike :func:`build_lambda_mosaics_legacy`.
 
-    With ``weighting="mean"`` every valid pixel gets weight 1, which reproduces
-    an unweighted average and an exposure-count weight map exactly as before
-    this option was added. With ``weighting="ivar"``, each pixel is weighted by
-    the inverse of its reprojected ``VARIANCE`` value; an exposure without a
-    usable ``VARIANCE`` HDU falls back to weight 1 for that exposure (with one
-    warning).
+    ``dlambda`` is either one half-width shared by every bin, or an array with
+    one half-width per ``bin_centers`` entry (e.g. a feature's narrower line
+    band next to its wider continuum bands -- see
+    :func:`spherex_ice.tau.build_epoch_tau_map`).
+
+    ``bin_sources``, if given, is one set of allowed exposure paths per bin
+    (same length as ``bin_centers``): a file not in ``bin_sources[b]`` is
+    skipped for bin ``b`` specifically, even though it's still read once and
+    may still contribute to other bins. This is what lets several bins that
+    each need their own exposure exclusions (e.g. independent outlier
+    rejection per band in :mod:`spherex_ice.tau`) share one pass over
+    ``resolved`` (the union of every bin's own files) -- each file is read,
+    cleaned and wavelength-mapped once no matter how many bins it touches --
+    instead of every bin re-reading/re-cleaning every file from scratch in its
+    own separate call. Default (None): every file in ``resolved`` contributes
+    to every bin, exactly as before this parameter existed.
 
     Returns
     -------
@@ -217,6 +228,9 @@ def build_lambda_mosaics_streaming(
     need_variance = weighting == "ivar"
 
     n_bins = len(bin_centers)
+    dlambda_per_bin = np.broadcast_to(np.asarray(dlambda, dtype=float), (n_bins,))
+    if bin_sources is not None and len(bin_sources) != n_bins:
+        raise ValueError(f"bin_sources has {len(bin_sources)} entries, expected {n_bins} (one per bin_centers).")
     ny, nx = ref_shape
     sum_acc = np.zeros((n_bins, ny, nx), dtype=np.float32)
     weight_acc = np.zeros((n_bins, ny, nx), dtype=np.float32)
@@ -253,9 +267,12 @@ def build_lambda_mosaics_streaming(
         n_used += 1
 
         for b, lam0 in enumerate(bin_centers):
-            if lam0 + dlambda < lam_lo or lam0 - dlambda > lam_hi:
+            if bin_sources is not None and fp not in bin_sources[b]:
                 continue
-            mask = np.abs(lam - lam0) <= dlambda
+            db = dlambda_per_bin[b]
+            if lam0 + db < lam_lo or lam0 - db > lam_hi:
+                continue
+            mask = np.abs(lam - lam0) <= db
             if not mask.any():
                 continue
             data_masked = np.where(mask, data, np.nan)
@@ -449,6 +466,7 @@ def save_mosaic_fits(
     lambda_um: float,
     dlambda: float,
     extra_header: dict[str, Any] | None = None,
+    bunit: str = "MJy/sr",
 ) -> None:
     """Write a streaming mosaic (+ its per-pixel weight map) to FITS.
 
@@ -464,8 +482,13 @@ def save_mosaic_fits(
         for k, v in extra_header.items():
             hdr[k] = v
 
-    mosaic_hdu = fits.ImageHDU(data=mosaic.astype(np.float32), header=hdr, name="MOSAIC")
-    weight_hdu = fits.ImageHDU(data=weight.astype(np.float32), header=hdr.copy(), name="WEIGHT")
+    mosaic_hdr = hdr.copy()
+    mosaic_hdr["BUNIT"] = (bunit, "Surface brightness (native) or flux density (--units mjy)")
+    weight_hdr = hdr.copy()
+    weight_hdr["BUNIT"] = ("", "Total weight per pixel (exposure count under weighting=mean)")
+
+    mosaic_hdu = fits.ImageHDU(data=mosaic.astype(np.float32), header=mosaic_hdr, name="MOSAIC")
+    weight_hdu = fits.ImageHDU(data=weight.astype(np.float32), header=weight_hdr, name="WEIGHT")
     fits.HDUList([fits.PrimaryHDU(), mosaic_hdu, weight_hdu]).writeto(path, overwrite=True)
 
 

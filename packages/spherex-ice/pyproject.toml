@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spherex-ice"
+version = "0.1.0"
+description = "Per-pixel, per-epoch spectral feature mapping (ice absorption, PAH/recombination-line emission) from SPHEREx Level 2 data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Javier Serna", email = "jserna@ou.edu" }]
+dependencies = [
+    "numpy",
+    "astropy",
+    "reproject",
+    "matplotlib",
+    "photutils",
+    "spherexstack",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+spherex-ice-epochs = "spherex_ice.cli:epochs"
+spherex-ice-map = "spherex_ice.cli:map_"
+spherex-ice-get = "spherex_ice.cli:get"
+spherex-ice-rgb = "spherex_ice.cli:rgb"
+spherex-ice-blend = "spherex_ice.cli:blend"
+spherex-ice-from-cube = "spherex_ice.cli:from_cube"
+spherex-ice-inspect = "spherex_ice.cli:inspect"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

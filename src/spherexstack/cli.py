@@ -32,6 +32,7 @@ from spherexstack import io
 from spherexstack import mosaic as mosaic_mod
 from spherexstack import query as query_mod
 from spherexstack import roi as roi_mod
+from spherexstack import units as units_mod
 from spherexstack.progress import ProgressBar
 
 
@@ -80,6 +81,17 @@ def _add_weighting_arg(ap: argparse.ArgumentParser) -> None:
         "matching the original behavior. 'ivar' weights by 1/VARIANCE (falls back to 'mean' "
         "for exposures without a usable VARIANCE HDU -- re-download with --keep-hdus including "
         "VARIANCE to use this).",
+    )
+
+
+def _add_units_arg(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument(
+        "--units",
+        choices=units_mod.UNIT_CHOICES,
+        default="mjy_sr",
+        help="Flux unit for the FITS output. 'mjy_sr' (default) keeps SPHEREx's native MJy/sr "
+        "surface brightness. 'mjy' converts to a per-pixel flux density in mJy, the same "
+        "conversion IRSA's own SPHEREx mosaic-cube tutorial uses before aperture photometry.",
     )
 
 
@@ -138,6 +150,7 @@ def mosaic() -> None:
     _add_cleaning_args(ap)
     _add_weighting_arg(ap)
     _add_grayscale_arg(ap)
+    _add_units_arg(ap)
     args = ap.parse_args()
 
     bad_bits = _bad_bits_from_arg(args.bad_bits)
@@ -172,6 +185,8 @@ def mosaic() -> None:
             f"[ERROR] Zero coverage at lambda={args.lambda_um} um -- no exposure contributed a "
             "single pixel. Check that the FITS list, ROI and --lambda_um/--dlambda overlap."
         )
+
+    m, bunit = units_mod.convert_units(m, args.units, ref_wcs)
 
     from spherexstack import animate
 
@@ -209,8 +224,9 @@ def mosaic() -> None:
                 "DECMAX": roi_box["dec_max"],
                 "COVERAGE": cov,
             },
+            bunit=bunit,
         )
-        print(f"[DONE] {fits_path} (MOSAIC + WEIGHT, for merging with spherex-merge)")
+        print(f"[DONE] {fits_path} (MOSAIC + WEIGHT, {bunit}, for merging with spherex-merge)")
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +430,7 @@ def cube() -> None:
     ap.add_argument("--min_overlap_px", type=int, default=30)
     _add_cleaning_args(ap)
     _add_weighting_arg(ap)
+    _add_units_arg(ap)
     args = ap.parse_args()
 
     bad_bits = _bad_bits_from_arg(args.bad_bits)
@@ -489,15 +506,17 @@ def cube() -> None:
         )
         cube_arr, weight_cube, coverage = cube_mod.assemble_cube(mosaics, coverages, weights)
 
+    cube_arr, bunit = units_mod.convert_units(cube_arr, args.units, ref_wcs)
+
     out_path = Path(args.out).expanduser().resolve()
     cube_mod.save_cube_fits(
         out_path, cube_arr, weight_cube, ref_wcs, bin_centers, dlambda=args.dlambda, coverage=coverage,
-        extra_header=extra_header,
+        extra_header=extra_header, bunit=bunit,
     )
     n_empty = int(np.sum(coverage == 0))
     if n_empty:
         print(f"[WARN] {n_empty}/{len(coverage)} wavelength bins have zero coverage (see the COVERAGE table).")
-    print(f"[DONE] {out_path}")
+    print(f"[DONE] {out_path} ({bunit})")
 
 
 # ---------------------------------------------------------------------------
