@@ -5,8 +5,8 @@ SPHEREx scans the whole sky from 0.75 to 5 µm, and all of that data is public o
 [IRSA](https://irsa.ipac.caltech.edu/). This project automates the part of working with it that
 takes the most hand-holding to do yourself. Give it coordinates, and it pulls the SPHEREx Level 2
 exposures that cover that spot, cleans them up, and hands you back something you can actually look
-at, a monochromatic image, a false-color RGB, a full spectral cube, or a GIF sweeping across
-wavelength. No manifest or ROI file to hand-write, no FITS wrangling, just a target and a command.
+at and also measure, a monochromatic image, a false-color RGB, a full spectral cube, or a GIF sweeping across
+wavelength. It just uses a command with a target coordinate.
 
 ![Wavelength sweep of Andromeda (M31), built by this package](docs/img/demo_lambda_slices_Andromeda.gif)
 
